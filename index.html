@@ -109,12 +109,15 @@
   #inv-stats { font-size:12px; color:#cdd6ff; margin:4px 0 14px; }
   .inv-sub { font-size:12px; color:#9fb0ff; margin-bottom:6px; font-weight:600; }
   #inv-equipped { display:flex; gap:10px; margin-bottom:14px; }
-  #inv-equipped .slot { flex:1; min-height:74px; border:1px solid rgba(255,255,255,.2);
-    border-radius:10px; padding:8px; background:rgba(0,0,0,.25); cursor:pointer; text-align:center; }
+  /* Cinco ranuras entran a lo ancho, pero con menos aire y letra más chica
+     que cuando eran tres. */
+  #inv-equipped .slot { flex:1; min-width:0; min-height:76px; border:1px solid rgba(255,255,255,.2);
+    border-radius:10px; padding:7px 5px; background:rgba(0,0,0,.25); cursor:pointer; text-align:center; }
   #inv-equipped .slot.empty { opacity:.45; cursor:default; }
-  #inv-equipped .slot .ic { font-size:22px; }
-  #inv-equipped .slot .nm { font-size:11px; font-weight:700; margin-top:2px; }
-  #inv-equipped .slot .st { font-size:10px; color:#9fb0ff; margin-top:3px; line-height:1.3; }
+  #inv-equipped .slot .ic { font-size:20px; }
+  #inv-equipped .slot .nm { font-size:10px; font-weight:700; margin-top:2px; line-height:1.25;
+    overflow-wrap:anywhere; }
+  #inv-equipped .slot .st { font-size:9px; color:#9fb0ff; margin-top:3px; line-height:1.3; }
   /* Tres columnas: mochila, personaje y ficha del objeto elegido. */
   #inv-cuerpo { display:flex; gap:14px; align-items:flex-start; }
   #inv-mochila { flex:1 1 260px; min-width:0; }
@@ -601,7 +604,18 @@ function xpForLevel(lv){ return Math.floor(80 * Math.pow(1.35, lv-1)); }
 // ============================================================
 let inventoryOpen = false;
 const inventory = [];                                    // objetos en la mochila
-const equipment = { weapon:null, armor:null, accessory:null };
+/*
+  Las ranuras, en el orden en que se muestran y en un solo lugar.
+
+  Antes esta lista estaba escrita a mano en cinco puntos distintos —el bonus
+  de equipo, el guardado, el inventario, el botín y la tienda—, así que sumar
+  una ranura significaba acordarse de los cinco. Ahora se agrega acá y el
+  resto sale solo.
+*/
+const SLOTS = ['weapon', 'helmet', 'armor', 'shield', 'accessory'];
+const SLOT_NOMBRE = { weapon:'Arma', helmet:'Yelmo', armor:'Armadura',
+                      shield:'Escudo', accessory:'Accesorio' };
+const equipment = Object.fromEntries(SLOTS.map(s=>[s, null]));
 const drops = [];                                        // botín tirado en el mundo
 let itemId = 1;
 
@@ -622,14 +636,23 @@ function rollRarity(boss){
 }
 const GEAR = {
   weapon:    { icon:'🗡️', names:['Katana','Wakizashi','Hoja Lunar','Filo Espiritual','Tachi Carmesí'], main:'atk' },
+  helmet:    { icon:'🪖', names:['Yelmo de Cuero','Casco Rúnico','Máscara de Oni','Diadema Astral','Capucha Sombría'], main:'cabeza' },
   armor:     { icon:'🥋', names:['Kimono','Armadura Rúnica','Manto Sombrío','Coraza de Jade','Yukata Astral'], main:'def' },
+  shield:    { icon:'🛡️', names:['Escudo de Madera','Broquel Rúnico','Égida de Jade','Rodela Carmesí','Escudo Lunar'], main:'bloqueo' },
   accessory: { icon:'📿', names:['Amuleto','Anillo Rúnico','Talismán','Colgante Espiritual','Reliquia Astral'], main:'mix' },
 };
 function makeGear(type, lv, rarity){
   const g = GEAR[type], base = lv*1.6 + 4;
   const stats = { atk:0, def:0, hpMax:0, mpMax:0 };
+  /*
+    Cada familia reparte distinto para que la elección tenga sentido: el yelmo
+    da poca defensa pero maná, el escudo es defensa pura y aguante. Si todas
+    dieran lo mismo, cinco ranuras serían una sola repetida cinco veces.
+  */
   if(g.main==='atk'){ stats.atk=Math.round(base*rarity.mult); stats.def=Math.round(base*0.2*rarity.mult); }
   else if(g.main==='def'){ stats.def=Math.round(base*0.8*rarity.mult); stats.hpMax=Math.round(base*1.6*rarity.mult); }
+  else if(g.main==='cabeza'){ stats.def=Math.round(base*0.45*rarity.mult); stats.hpMax=Math.round(base*0.7*rarity.mult); stats.mpMax=Math.round(base*0.9*rarity.mult); }
+  else if(g.main==='bloqueo'){ stats.def=Math.round(base*1.1*rarity.mult); stats.hpMax=Math.round(base*0.8*rarity.mult); }
   else { stats.atk=Math.round(base*0.4*rarity.mult); stats.mpMax=Math.round(base*1.2*rarity.mult); stats.def=Math.round(base*0.3*rarity.mult); }
   const nm = g.names[Math.floor(Math.random()*g.names.length)];
   return { id:itemId++, type, slot:type, icon:g.icon, rarity, lv,
@@ -646,8 +669,8 @@ function rollLoot(e){
   if(gold>0) items.push({ gold });
   if(Math.random() < (e.isBoss?1:0.35)) items.push(makePotion(Math.random()<0.6?'hp':'mp', e.lv));
   if(Math.random() < (e.isBoss?1:0.28)){
-    const types=['weapon','armor','accessory'], n=e.isBoss?2:1;
-    for(let i=0;i<n;i++) items.push(makeGear(types[Math.floor(Math.random()*3)], e.lv, rollRarity(e.isBoss)));
+    const n = e.isBoss?2:1;
+    for(let i=0;i<n;i++) items.push(makeGear(SLOTS[Math.floor(Math.random()*SLOTS.length)], e.lv, rollRarity(e.isBoss)));
   }
   return items;
 }
@@ -681,7 +704,7 @@ function addToInventory(item){
 }
 function equipBonus(){
   const b = { atk:0, def:0, hpMax:0, mpMax:0 };
-  for(const slot of ['weapon','armor','accessory']){
+  for(const slot of SLOTS){
     const it = equipment[slot]; if(!it) continue;
     b.atk+=it.stats.atk; b.def+=it.stats.def; b.hpMax+=it.stats.hpMax; b.mpMax+=it.stats.mpMax;
   }
@@ -725,7 +748,7 @@ function statLine(it){
   if(s.mpMax) parts.push('MP +'+s.mpMax);
   return parts.join(' · ');
 }
-function slotName(s){ return s==='weapon'?'Arma':s==='armor'?'Armadura':'Accesorio'; }
+function slotName(s){ return SLOT_NOMBRE[s] || s; }
 /** Objeto abierto en la ficha de la derecha. */
 let itemElegido = null;
 
@@ -772,7 +795,7 @@ function renderInventory(){
   document.getElementById('inv-stats').innerHTML =
     `⚔️ ATK ${player.atk}&nbsp;&nbsp; 🛡️ DEF ${player.def}&nbsp;&nbsp; ❤️ HP ${player.hpMax}&nbsp;&nbsp; 🔷 MP ${player.mpMax}`;
   const eq = document.getElementById('inv-equipped'); eq.innerHTML='';
-  for(const slot of ['weapon','armor','accessory']){
+  for(const slot of SLOTS){
     const it = equipment[slot], cell = document.createElement('div'); cell.className='slot';
     if(it){ cell.style.borderColor = it.rarity.color;
       cell.innerHTML = `<div class="ic">${it.icon}</div><div class="nm" style="color:${it.rarity.color}">${it.name}</div><div class="st">${statLine(it)}</div>`;
@@ -869,7 +892,7 @@ function restockShop(){
   shopStock.push(makePotion('hp', player.lv));
   shopStock.push(makePotion('mp', player.lv));
   for(let i=0;i<5;i++){
-    const t = ['weapon','armor','accessory'][i % 3];
+    const t = SLOTS[i % SLOTS.length];
     shopStock.push(makeGear(t, Math.max(1, player.lv + THREE.MathUtils.randInt(-1,2)), rollRarity(false)));
   }
 }
@@ -980,7 +1003,7 @@ function saveGame(){
               base:{...player.base}, gold:player.gold },
     pos: { x:hero.position.x, z:hero.position.z },
     inventory: inventory.map(serItem),
-    equipment: { weapon:serItem(equipment.weapon), armor:serItem(equipment.armor), accessory:serItem(equipment.accessory) },
+    equipment: Object.fromEntries(SLOTS.map(s=>[s, serItem(equipment[s])])),
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); flashSaved(); }
   catch(err){ console.error('No se pudo guardar:', err); }
@@ -993,9 +1016,9 @@ function loadGame(){
     player.lv = d.player.lv; player.xp = d.player.xp; player.xpNext = d.player.xpNext;
     player.gold = d.player.gold; player.base = {...d.player.base};
     inventory.length = 0; (d.inventory||[]).forEach(o=> inventory.push(deserItem(o)));
-    equipment.weapon = deserItem(d.equipment.weapon);
-    equipment.armor = deserItem(d.equipment.armor);
-    equipment.accessory = deserItem(d.equipment.accessory);
+    // Las partidas viejas no tienen yelmo ni escudo: deserItem(undefined) da
+    // null y la ranura queda vacia, que es exactamente lo que corresponde.
+    for(const s of SLOTS) equipment[s] = deserItem(d.equipment[s]);
     if(d.itemId) itemId = d.itemId;
     recomputeStats();
     player.hp = Math.min(d.player.hp ?? player.hpMax, player.hpMax);
