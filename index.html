@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aetheria Online — Anime MMO RPG</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e1a;
+    font-family: "Segoe UI", system-ui, sans-serif; color: #fff; user-select: none; }
+  #game { position: fixed; inset: 0; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+
+  .panel { position: absolute; background: rgba(15,18,38,.72);
+    border: 1px solid rgba(120,160,255,.35); border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.4); backdrop-filter: blur(6px); }
+
+  /* Player frame top-left */
+  #player-frame { top: 14px; left: 14px; width: 270px; padding: 12px 14px; }
+  #player-frame .row { display: flex; align-items: center; gap: 10px; }
+  #avatar { width: 46px; height: 46px; border-radius: 50%;
+    background: linear-gradient(135deg,#7aa0ff,#c77dff); flex: 0 0 auto;
+    border: 2px solid #fff; box-shadow: 0 0 12px #7aa0ff; }
+  #pname { font-weight: 700; font-size: 15px; }
+  #plevel { font-size: 12px; color: #ffd166; }
+  .bar { height: 13px; border-radius: 7px; background: rgba(0,0,0,.45);
+    overflow: hidden; margin-top: 6px; position: relative; border:1px solid rgba(255,255,255,.12);}
+  .bar > span { display: block; height: 100%; width: 100%;
+    transition: width .15s ease; }
+  .hp > span { background: linear-gradient(90deg,#ff5d6c,#ff2d55); }
+  .mp > span { background: linear-gradient(90deg,#62d2ff,#3a7bff); }
+  .xp > span { background: linear-gradient(90deg,#ffe66d,#ffb703); }
+  .bar .label { position: absolute; inset: 0; font-size: 10px; line-height: 13px;
+    text-align: center; text-shadow: 0 1px 2px #000; font-weight:600;}
+
+  /* Target frame top-center */
+  #target-frame { top: 14px; left: 50%; transform: translateX(-50%);
+    width: 250px; padding: 10px 12px; display: none; }
+  #tname { font-weight: 700; font-size: 14px; }
+  #tlevel { font-size: 12px; color: #ff9f1c; }
+
+  /* Zone banner */
+  #zone-banner { top: 84px; left: 50%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 800; letter-spacing: 2px; opacity: 0;
+    text-shadow: 0 2px 18px rgba(0,0,0,.9); transition: opacity .6s; text-align:center;}
+  #zone-banner small { display:block; font-size: 13px; font-weight:600; letter-spacing:1px; }
+
+  /* Skill bar bottom */
+  #skillbar { bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 10px; padding: 10px 12px; }
+  .skill { width: 56px; height: 56px; border-radius: 10px; pointer-events: auto;
+    background: rgba(30,36,70,.9); border: 1px solid rgba(140,170,255,.4);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; transition: transform .08s; }
+  .skill:hover { transform: translateY(-3px); }
+  .skill .ico { font-size: 22px; }
+  .skill .key { position: absolute; top: 2px; left: 5px; font-size: 10px; color:#ffd166; }
+  .skill .cd { position: absolute; inset: 0; background: rgba(0,0,0,.6);
+    border-radius: 10px; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:16px; opacity:0; }
+
+  /* Minimap */
+  #minimap { top: 14px; right: 14px; width: 170px; height: 170px; padding: 0;
+    overflow: hidden; }
+  #minimap canvas { width: 100%; height: 100%; display:block; border-radius: 11px;}
+
+  /* Controls hint */
+  #hint { bottom: 14px; left: 14px; font-size: 12px; padding: 10px 12px;
+    line-height: 1.5; color: #cdd6ff; max-width: 230px; }
+  #hint b { color: #ffd166; }
+
+  /* Floating combat text layer */
+  #fct { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .dmg { position: absolute; font-weight: 800; font-size: 18px;
+    text-shadow: 0 2px 4px #000; transform: translate(-50%,-50%);
+    animation: floatUp 1s ease-out forwards; }
+  .dmg.player { color: #ffd166; }
+  .dmg.enemy  { color: #ff5d6c; }
+  .dmg.crit   { color: #ffe066; font-size: 26px; }
+  .dmg.heal   { color: #7CFC9A; }
+  @keyframes floatUp { 0%{opacity:1; } 100%{opacity:0; transform: translate(-50%,-130%);} }
+
+  /* Toast / level up */
+  #toast { position: fixed; top: 40%; left: 50%; transform: translate(-50%,-50%);
+    font-size: 40px; font-weight: 900; opacity: 0; text-align:center;
+    text-shadow: 0 0 24px #ffd166, 0 4px 10px #000; }
+
+  /* Inventory */
+  #inventory { display:none; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:540px; max-width:94vw; padding:16px 18px; pointer-events:auto; }
+  #inventory h2 { font-size:18px; margin-bottom:6px; display:flex;
+    justify-content:space-between; align-items:center; }
+  #inventory h2 .gold { color:#ffd166; font-size:14px; }
+  #inv-stats { font-size:12px; color:#cdd6ff; margin:4px 0 14px; }
+  .inv-sub { font-size:12px; color:#9fb0ff; margin-bottom:6px; font-weight:600; }
+  #inv-equipped { display:flex; gap:10px; margin-bottom:14px; }
+  #inv-equipped .slot { flex:1; min-height:74px; border:1px solid rgba(255,255,255,.2);
+    border-radius:10px; padding:8px; background:rgba(0,0,0,.25); cursor:pointer; text-align:center; }
+  #inv-equipped .slot.empty { opacity:.45; cursor:default; }
+  #inv-equipped .slot .ic { font-size:22px; }
+  #inv-equipped .slot .nm { font-size:11px; font-weight:700; margin-top:2px; }
+  #inv-equipped .slot .st { font-size:10px; color:#9fb0ff; margin-top:3px; line-height:1.3; }
+  #inv-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:8px;
+    min-height:120px; max-height:240px; overflow-y:auto; }
+  #inv-grid .item { aspect-ratio:1; border:2px solid #888; border-radius:10px;
+    background:rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center;
+    font-size:24px; cursor:pointer; position:relative; transition:transform .08s; }
+  #inv-grid .item:hover { transform:scale(1.08); }
+  #inv-grid .item .qty { position:absolute; bottom:1px; right:4px; font-size:11px;
+    color:#fff; text-shadow:0 1px 2px #000; font-weight:700; }
+  #inv-grid .empty-msg { grid-column:1/-1; color:#9fb0ff; text-align:center;
+    padding:26px; font-size:13px; }
+  #inv-hint { font-size:11px; color:#8090c0; margin-top:12px; text-align:center; }
+
+  /* Save indicator + wipe button */
+  #save-indicator { position:fixed; top:200px; left:14px; padding:6px 12px;
+    background:rgba(20,40,30,.85); border:1px solid rgba(124,252,154,.5);
+    border-radius:9px; color:#7CFC9A; font-size:12px; font-weight:700;
+    opacity:0; transition:opacity .4s; pointer-events:none; }
+  #wipe-save { pointer-events:auto; cursor:pointer; padding:5px 10px; border-radius:8px;
+    background:rgba(255,80,90,.18); border:1px solid rgba(255,93,108,.5);
+    color:#ff9aa5; font-size:11px; font-weight:600; }
+  #wipe-save:hover { background:rgba(255,80,90,.32); }
+
+  #safe-indicator { display:none; position:fixed; top:50%; left:14px; transform:translateY(-50%);
+    padding:7px 13px; background:rgba(20,40,55,.85); border:1px solid rgba(127,231,255,.55);
+    border-radius:9px; color:#9fe9ff; font-size:13px; font-weight:700; pointer-events:none; }
+
+  /* Shop */
+  #shop-prompt { display:none; bottom:96px; left:50%; transform:translateX(-50%);
+    padding:8px 16px; font-size:14px; pointer-events:none; }
+  #shop-prompt b { color:#ffd166; }
+  #shop { display:none; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:680px; max-width:95vw; padding:16px 18px; pointer-events:auto; }
+  #shop h2 { font-size:18px; margin-bottom:10px; display:flex;
+    justify-content:space-between; align-items:center; }
+  #shop h2 .gold { color:#ffd166; font-size:14px; }
+  #shop-cols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  #shop-cols h3 { font-size:13px; color:#9fb0ff; margin-bottom:6px; }
+  .shop-list { max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+  .srow { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:9px;
+    background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.1); cursor:pointer;
+    transition:background .1s; }
+  .srow:hover { background:rgba(120,160,255,.22); }
+  .srow.off { opacity:.45; }
+  .srow .ic { font-size:22px; flex:0 0 auto; }
+  .srow .info { flex:1; display:flex; flex-direction:column; line-height:1.25; }
+  .srow .info small { font-size:10px; color:#9fb0ff; }
+  .srow .price { font-size:13px; font-weight:700; color:#ffd166; white-space:nowrap; }
+  .srow .price.sell { color:#7CFC9A; }
+  .shop-list .empty-msg { color:#9fb0ff; text-align:center; padding:18px; font-size:12px; }
+  #shop-foot { display:flex; justify-content:space-between; align-items:center;
+    margin-top:12px; font-size:11px; color:#8090c0; }
+  #shop-refresh { pointer-events:auto; cursor:pointer; padding:6px 12px; border-radius:8px;
+    background:rgba(120,160,255,.25); border:1px solid rgba(140,170,255,.5);
+    color:#fff; font-size:12px; font-weight:600; }
+  #shop-refresh:hover { background:rgba(120,160,255,.4); }
+
+  /* Hurt flash */
+  #hurt-flash { position:fixed; inset:0; pointer-events:none; opacity:0;
+    transition:opacity .3s ease-out; z-index:30;
+    background:radial-gradient(circle, rgba(255,0,0,0) 45%, rgba(220,0,30,.85) 100%); }
+
+  /* Loading */
+  #loader { position: fixed; inset: 0; display: flex; align-items: center;
+    justify-content: center; flex-direction: column; gap: 14px; z-index: 50;
+    background: radial-gradient(circle at 50% 40%, #1a2150, #0b0e1a); }
+  #loader h1 { font-size: 34px; background: linear-gradient(90deg,#7aa0ff,#c77dff,#ffd166);
+    -webkit-background-clip: text; background-clip:text; color: transparent; letter-spacing:2px;}
+  #loader p { color:#9fb0ff; }
+  .spinner { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,.15);
+    border-top-color: #7aa0ff; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg);} }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud">
+  <div id="player-frame" class="panel">
+    <div class="row">
+      <div id="avatar"></div>
+      <div style="flex:1">
+        <div id="pname">Akira <span id="plevel">Nv. 1</span></div>
+        <div class="bar hp"><span style="width:100%"></span><div class="label" id="hp-label">100/100</div></div>
+        <div class="bar mp"><span style="width:100%"></span><div class="label" id="mp-label">50/50</div></div>
+      </div>
+    </div>
+    <div class="bar xp" style="margin-top:8px"><span style="width:0%"></span><div class="label" id="xp-label">XP 0%</div></div>
+    <div id="pgold" style="margin-top:8px;font-size:13px;color:#ffd166;font-weight:700;">🪙 0 oro</div>
+  </div>
+
+  <div id="target-frame" class="panel">
+    <div id="tname">Enemigo <span id="tlevel">Nv. 1</span></div>
+    <div class="bar hp"><span style="width:100%"></span><div class="label" id="t-hp-label">100/100</div></div>
+  </div>
+
+  <div id="zone-banner"></div>
+
+  <div id="minimap" class="panel"><canvas id="mm" width="340" height="340"></canvas></div>
+
+  <div id="skillbar" class="panel">
+    <div class="skill" data-skill="0"><span class="key">LMB</span><span class="ico">⚔️</span><div class="cd"></div></div>
+    <div class="skill" data-skill="1"><span class="key">1</span><span class="ico">🔥</span><div class="cd"></div></div>
+    <div class="skill" data-skill="2"><span class="key">2</span><span class="ico">⚡</span><div class="cd"></div></div>
+    <div class="skill" data-skill="3"><span class="key">3</span><span class="ico">✨</span><div class="cd"></div></div>
+  </div>
+
+  <div id="hint" class="panel">
+    <b>WASD</b> mover · <b>Click der</b> cámara · <b>Click izq</b> atacar<br>
+    <b>1/2/3</b> habilidades · <b>Espacio</b> saltar · <b>Shift</b> correr · <b>Ctrl</b> esquiva<br>
+    <b>Tab</b> fijar · <b>I</b> inventario · <b>E</b> tienda · <b>K</b> guardar
+  </div>
+
+  <div id="shop-prompt" class="panel">Pulsá <b>[E]</b> para comerciar con el Mercader Aoi</div>
+
+  <div id="shop" class="panel">
+    <h2><span>🛒 Mercader Aoi</span><span class="gold">🪙 <span id="shop-gold">0</span> oro</span></h2>
+    <div id="shop-cols">
+      <div><h3>Comprar</h3><div id="shop-buy" class="shop-list"></div></div>
+      <div><h3>Vender (tu mochila)</h3><div id="shop-sell" class="shop-list"></div></div>
+    </div>
+    <div id="shop-foot">
+      <span>Click para comprar / vender · <b>E</b> para cerrar</span>
+      <span id="shop-refresh">🔄 Renovar stock (🪙 30)</span>
+    </div>
+  </div>
+
+  <div id="inventory" class="panel">
+    <h2><span>🎒 Inventario</span><span class="gold">🪙 <span id="inv-gold">0</span> oro</span></h2>
+    <div id="inv-stats"></div>
+    <div class="inv-sub">Equipo</div>
+    <div id="inv-equipped"></div>
+    <div class="inv-sub">Mochila</div>
+    <div id="inv-grid"></div>
+    <div id="inv-hint" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <span>Click = equipar / usar · Click en equipo = quitar · <b>K</b> guardar · <b>I</b> cerrar</span>
+      <button id="wipe-save">🗑️ Borrar partida</button>
+    </div>
+  </div>
+
+  <div id="save-indicator">💾 Progreso guardado</div>
+  <div id="safe-indicator">⛩️ Zona segura · descansando</div>
+</div>
+
+<div id="fct"></div>
+<div id="hurt-flash"></div>
+<div id="toast"></div>
+
+<div id="loader">
+  <h1>AETHERIA ONLINE</h1>
+  <div class="spinner"></div>
+  <p>Cargando el reino...</p>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.min.js"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+//  AETHERIA ONLINE — single-player anime MMO-style RPG
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fc8ff);
+scene.fog = new THREE.Fog(0x9fc8ff, 80, 420);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('game').appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
+
+// ---------- Lights (soft anime look) ----------
+const sun = new THREE.DirectionalLight(0xfff2d6, 1.5);
+sun.position.set(60, 120, 40);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 400;
+sun.shadow.camera.left = -160; sun.shadow.camera.right = 160;
+sun.shadow.camera.top = 160; sun.shadow.camera.bottom = -160;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbfe0ff, 0x5a7a4a, 0.9));
+scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+// ============================================================
+//  WORLD
+// ============================================================
+const WORLD = 500; // half-size
+
+// ----- Zones: low -> high level, arranged across the map -----
+const ZONES = [
+  { name:'Pradera de Sakura', sub:'Nv. 1-5',  color:0x7ec96b, x:0,    z:0,    r:120, lv:[1,5],   tint:0xff9ecb, enemy:'Slime Mochi' },
+  { name:'Bosque Susurrante', sub:'Nv. 6-12', color:0x3e8e5a, x:-220, z:-120, r:120, lv:[6,12],  tint:0x4caf50, enemy:'Kitsune Sombrío' },
+  { name:'Desierto Ardiente', sub:'Nv. 13-20',color:0xd9b06a, x:220,  z:-140, r:130, lv:[13,20], tint:0xff7b3a, enemy:'Golem de Arena' },
+  { name:'Picos Helados',     sub:'Nv. 21-30',color:0xc7e4ff, x:-200, z:200,  r:130, lv:[21,30], tint:0x7fdfff, enemy:'Yuki Oni' },
+  { name:'Abismo Demoníaco',  sub:'Nv. 31-45',color:0x6b3b8e, x:230,  z:210,  r:140, lv:[31,45], tint:0xb14dff, enemy:'Señor del Vacío' },
+];
+
+function zoneAt(x, z) {
+  let best = null, bestD = Infinity;
+  for (const zo of ZONES) {
+    const d = Math.hypot(x - zo.x, z - zo.z);
+    if (d < zo.r && d < bestD) { bestD = d; best = zo; }
+  }
+  return best || ZONES[0];
+}
+
+// ----- Ground: large plane with vertex colors per zone -----
+const segs = 120;
+const groundGeo = new THREE.PlaneGeometry(WORLD*2, WORLD*2, segs, segs);
+groundGeo.rotateX(-Math.PI/2);
+const colAttr = [];
+const pos = groundGeo.attributes.position;
+for (let i=0; i<pos.count; i++){
+  const x = pos.getX(i), z = pos.getZ(i);
+  // gentle rolling hills
+  const h = Math.sin(x*0.012)*4 + Math.cos(z*0.013)*4 + Math.sin((x+z)*0.02)*2;
+  pos.setY(i, h);
+  const zo = zoneAt(x, z);
+  const c = new THREE.Color(zo.color).lerp(new THREE.Color(0xffffff), 0.08*Math.random());
+  colAttr.push(c.r, c.g, c.b);
+}
+groundGeo.setAttribute('color', new THREE.Float32BufferAttribute(colAttr, 3));
+groundGeo.computeVertexNormals();
+const ground = new THREE.Mesh(groundGeo,
+  new THREE.MeshStandardMaterial({ vertexColors:true, roughness:1, metalness:0 }));
+ground.receiveShadow = true;
+scene.add(ground);
+
+function groundHeight(x, z){
+  return Math.sin(x*0.012)*4 + Math.cos(z*0.013)*4 + Math.sin((x+z)*0.02)*2;
+}
+
+// ----- Decorations per zone (trees / rocks / crystals) -----
+const decoMat = {
+  trunk: new THREE.MeshStandardMaterial({color:0x7a4a2a, roughness:1}),
+  rock:  new THREE.MeshStandardMaterial({color:0x8a8f9a, roughness:1}),
+};
+function makeTree(tint){
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.9,5,6), decoMat.trunk);
+  trunk.position.y = 2.5; trunk.castShadow = true; g.add(trunk);
+  for (let i=0;i<3;i++){
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(4-i*0.9, 4, 7),
+      new THREE.MeshStandardMaterial({color:tint, roughness:1, flatShading:true}));
+    cone.position.y = 5 + i*2.3; cone.castShadow = true; g.add(cone);
+  }
+  return g;
+}
+function makeCrystal(tint){
+  const m = new THREE.Mesh(new THREE.OctahedronGeometry(2.4),
+    new THREE.MeshStandardMaterial({color:tint, emissive:tint, emissiveIntensity:.5,
+      roughness:.2, metalness:.3, flatShading:true}));
+  m.position.y = 2.4; m.castShadow = true;
+  return m;
+}
+ZONES.forEach(zo=>{
+  const count = 60;
+  for (let i=0;i<count;i++){
+    const a = Math.random()*Math.PI*2, rr = Math.sqrt(Math.random())*zo.r*0.95;
+    const x = zo.x + Math.cos(a)*rr, z = zo.z + Math.sin(a)*rr;
+    let d;
+    if (zo.lv[0] >= 31 || zo.lv[0] >= 21) d = makeCrystal(zo.tint);
+    else if (Math.random()<0.7) d = makeTree(zo.tint);
+    else { d = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5+Math.random()*1.5), decoMat.rock); d.castShadow=true; }
+    d.position.set(x, groundHeight(x,z), z);
+    d.rotation.y = Math.random()*Math.PI*2;
+    const s = 0.7+Math.random()*0.8; d.scale.setScalar(s);
+    scene.add(d);
+  }
+});
+
+// ----- Floating clouds for atmosphere -----
+for (let i=0;i<22;i++){
+  const cl = new THREE.Group();
+  for (let j=0;j<4;j++){
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(6+Math.random()*5, 8, 8),
+      new THREE.MeshStandardMaterial({color:0xffffff, roughness:1, transparent:true, opacity:.85}));
+    puff.position.set((Math.random()-.5)*14,(Math.random()-.5)*3,(Math.random()-.5)*8);
+    cl.add(puff);
+  }
+  cl.position.set((Math.random()-.5)*WORLD*2, 70+Math.random()*40, (Math.random()-.5)*WORLD*2);
+  scene.add(cl);
+}
+
+// ============================================================
+//  PLAYER (chibi anime-style character)
+// ============================================================
+function buildHero(){
+  const g = new THREE.Group();
+  const body = new THREE.Group();        // todo el cuerpo (para inclinar/rolar sin tocar la raíz)
+  g.add(body);
+  const skin = new THREE.MeshStandardMaterial({color:0xffe0bd, roughness:.9});
+  const hair = new THREE.MeshStandardMaterial({color:0x2a2a40, roughness:.7});
+  const cloth= new THREE.MeshStandardMaterial({color:0x4a6cff, roughness:.8});
+  const cloth2=new THREE.MeshStandardMaterial({color:0xffffff, roughness:.8});
+  const boot = new THREE.MeshStandardMaterial({color:0x2c3550, roughness:.8});
+
+  // ----- LEGS (pivote en la cadera) -----
+  function legGroup(x){
+    const grp = new THREE.Group(); grp.position.set(x, 1.7, 0);
+    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.4,1.0,4,8), boot);
+    leg.position.y = -0.55; leg.castShadow=true; grp.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.35,0.95), boot);
+    foot.position.set(0,-1.25,0.18); foot.castShadow=true; grp.add(foot);
+    body.add(grp); return grp;
+  }
+  const legL = legGroup(-0.45), legR = legGroup(0.45);
+
+  // ----- TORSO -----
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.85,1.4,6,12), cloth);
+  torso.position.y = 2.6; torso.castShadow=true; body.add(torso);
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.4,12), cloth2);
+  belt.position.y = 2.0; body.add(belt);
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.7,0.18,8,16),
+    new THREE.MeshStandardMaterial({color:0xff5d8f, roughness:.7}));
+  scarf.position.y = 3.25; scarf.rotation.x = Math.PI/2; body.add(scarf);
+
+  // ----- ARMS (pivote en el hombro) -----
+  function armGroup(x){
+    const grp = new THREE.Group(); grp.position.set(x, 3.3, 0);
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.3,1.1,4,8), cloth);
+    arm.position.y = -0.6; arm.castShadow=true; grp.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.3,10,10), skin);
+    hand.position.y = -1.2; grp.add(hand);
+    body.add(grp); return grp;
+  }
+  const armL = armGroup(-1.05), armR = armGroup(1.05);
+
+  // ----- HEAD (grupo para inclinar/bobear) -----
+  const headG = new THREE.Group(); headG.position.y = 3.5; body.add(headG);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(1.0,16,16), skin);
+  head.position.y = 0.6; head.castShadow=true; headG.add(head);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(1.08,16,16,0,Math.PI*2,0,Math.PI*0.62), hair);
+  cap.position.y = 0.75; headG.add(cap);
+  for (let i=0;i<5;i++){
+    const sp = new THREE.Mesh(new THREE.ConeGeometry(0.28,0.7,5), hair);
+    sp.position.set(-0.7+i*0.35, 1.05, 0.85); sp.rotation.x = Math.PI*0.55; headG.add(sp);
+  }
+  const eyeB = new THREE.MeshStandardMaterial({color:0x3a8cff, emissive:0x1a4cff, emissiveIntensity:.3});
+  for (const sx of [-0.38,0.38]){
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.22,10,10), new THREE.MeshStandardMaterial({color:0xffffff}));
+    e.position.set(sx,0.65,0.85); e.scale.set(1,1.3,0.5); headG.add(e);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8), eyeB);
+    p.position.set(sx,0.62,1.0); headG.add(p);
+  }
+
+  // ----- SWORD (en la mano derecha, sigue el brazo) -----
+  const sword = new THREE.Group();
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.18,2.6,0.5),
+    new THREE.MeshStandardMaterial({color:0xdfe9ff, emissive:0x88aaff, emissiveIntensity:.4, metalness:.6, roughness:.3}));
+  blade.position.y = 1.6; sword.add(blade);
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.2,0.7),
+    new THREE.MeshStandardMaterial({color:0xffd166, metalness:.7})); guard.position.y=0.35; sword.add(guard);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.7),
+    new THREE.MeshStandardMaterial({color:0x6b3b2a})); sword.add(grip);
+  sword.position.set(0, -1.25, 0.25); sword.castShadow=true;
+  armR.add(sword);                       // la espada cuelga de la mano derecha
+
+  g.userData = { body, legL, legR, armL, armR, headG, torso, sword };
+  return g;
+}
+// ----- Safe sanctuary (spawn + village) -----
+const SPAWN = new THREE.Vector3(0, 0, 78);
+const SAFE_R = 44;
+function inSafeZone(x, z){ return Math.hypot(x - SPAWN.x, z - SPAWN.z) < SAFE_R; }
+(function buildSanctuary(){
+  // ground ring marker
+  const ring = new THREE.Mesh(new THREE.RingGeometry(SAFE_R-2, SAFE_R, 48),
+    new THREE.MeshBasicMaterial({color:0x7fe7ff, transparent:true, opacity:.35, side:THREE.DoubleSide}));
+  ring.rotation.x = -Math.PI/2; ring.position.set(SPAWN.x, groundHeight(SPAWN.x,SPAWN.z)+0.2, SPAWN.z);
+  scene.add(ring);
+  // stone plaza
+  const plaza = new THREE.Mesh(new THREE.CylinderGeometry(SAFE_R*0.55, SAFE_R*0.6, 0.4, 32),
+    new THREE.MeshStandardMaterial({color:0xd9d2c4, roughness:1}));
+  plaza.position.set(SPAWN.x, groundHeight(SPAWN.x,SPAWN.z)+0.1, SPAWN.z); plaza.receiveShadow=true; scene.add(plaza);
+  // fountain
+  const f = new THREE.Group();
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(3,3.4,1,16),
+    new THREE.MeshStandardMaterial({color:0xbfc4cc, roughness:.8})); basin.position.y=0.6; f.add(basin);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(2.6,2.6,0.3,16),
+    new THREE.MeshStandardMaterial({color:0x5ec8ff, emissive:0x2a7fff, emissiveIntensity:.5, transparent:true, opacity:.85}));
+  water.position.y=1.05; f.add(water);
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.5,2.2,10),
+    new THREE.MeshStandardMaterial({color:0xbfc4cc})); spout.position.y=2; f.add(spout);
+  f.position.set(SPAWN.x, groundHeight(SPAWN.x,SPAWN.z), SPAWN.z); scene.add(f);
+  // torii gates at the entrances
+  function torii(x,z,rot){
+    const g=new THREE.Group();
+    const matR=new THREE.MeshStandardMaterial({color:0xd6402e, roughness:.7});
+    for(const sx of [-3.4,3.4]){ const p=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.6,10,10), matR);
+      p.position.set(sx,5,0); p.castShadow=true; g.add(p); }
+    const top=new THREE.Mesh(new THREE.BoxGeometry(9,0.8,1.3), matR); top.position.y=10.2; top.castShadow=true; g.add(top);
+    const top2=new THREE.Mesh(new THREE.BoxGeometry(7.8,0.5,1.0), matR); top2.position.y=8.9; g.add(top2);
+    g.position.set(x, groundHeight(x,z), z); g.rotation.y=rot; scene.add(g);
+  }
+  torii(SPAWN.x, SPAWN.z - SAFE_R*0.95, 0);          // entrada sur (hacia los enemigos)
+  torii(SPAWN.x - SAFE_R*0.95, SPAWN.z, Math.PI/2);  // entrada oeste
+})();
+
+const hero = buildHero();
+hero.position.copy(SPAWN); hero.position.y = groundHeight(SPAWN.x, SPAWN.z);
+scene.add(hero);
+
+// ============================================================
+//  PLAYER STATE
+// ============================================================
+const player = {
+  lv: 1, xp: 0, xpNext: 100,
+  hp: 100, hpMax: 100, mp: 50, mpMax: 50,
+  atk: 14, def: 4,
+  base: { hpMax:100, mpMax:50, atk:14, def:4 },   // stats por nivel (sin equipo)
+  gold: 0,
+  vel: new THREE.Vector3(),
+  onGround: true, attackT: 0,
+};
+function xpForLevel(lv){ return Math.floor(80 * Math.pow(1.35, lv-1)); }
+
+// ============================================================
+//  LOOT & INVENTORY
+// ============================================================
+let inventoryOpen = false;
+const inventory = [];                                    // objetos en la mochila
+const equipment = { weapon:null, armor:null, accessory:null };
+const drops = [];                                        // botín tirado en el mundo
+let itemId = 1;
+
+const RARITIES = [
+  { key:'common',    name:'Común',      color:'#cfd8e3', mult:1.0, w:55 },
+  { key:'uncommon',  name:'Poco común', color:'#5dd35d', mult:1.4, w:25 },
+  { key:'rare',      name:'Raro',       color:'#5aa0ff', mult:1.9, w:13 },
+  { key:'epic',      name:'Épico',      color:'#c77dff', mult:2.6, w:6  },
+  { key:'legendary', name:'Legendario', color:'#ffb03a', mult:3.6, w:2  },
+];
+const UNIQUE_RARITY = { key:'unique', name:'ÚNICO', color:'#ff4d6d', mult:5.0, w:0 };  // solo de jefes
+const ALL_RARITIES = RARITIES.concat([UNIQUE_RARITY]);
+function rollRarity(boss){
+  const pool = RARITIES.map((r,i)=>({ r, w:r.w + (boss? i*5 : 0) }));
+  let tot = pool.reduce((s,p)=>s+p.w,0), x = Math.random()*tot;
+  for(const p of pool){ if((x -= p.w) <= 0) return p.r; }
+  return RARITIES[0];
+}
+const GEAR = {
+  weapon:    { icon:'🗡️', names:['Katana','Wakizashi','Hoja Lunar','Filo Espiritual','Tachi Carmesí'], main:'atk' },
+  armor:     { icon:'🥋', names:['Kimono','Armadura Rúnica','Manto Sombrío','Coraza de Jade','Yukata Astral'], main:'def' },
+  accessory: { icon:'📿', names:['Amuleto','Anillo Rúnico','Talismán','Colgante Espiritual','Reliquia Astral'], main:'mix' },
+};
+function makeGear(type, lv, rarity){
+  const g = GEAR[type], base = lv*1.6 + 4;
+  const stats = { atk:0, def:0, hpMax:0, mpMax:0 };
+  if(g.main==='atk'){ stats.atk=Math.round(base*rarity.mult); stats.def=Math.round(base*0.2*rarity.mult); }
+  else if(g.main==='def'){ stats.def=Math.round(base*0.8*rarity.mult); stats.hpMax=Math.round(base*1.6*rarity.mult); }
+  else { stats.atk=Math.round(base*0.4*rarity.mult); stats.mpMax=Math.round(base*1.2*rarity.mult); stats.def=Math.round(base*0.3*rarity.mult); }
+  const nm = g.names[Math.floor(Math.random()*g.names.length)];
+  return { id:itemId++, type, slot:type, icon:g.icon, rarity, lv,
+           name:(rarity.key!=='common'? rarity.name+' ':'')+nm, stats };
+}
+function makePotion(kind, lv){
+  return kind==='hp'
+    ? { id:itemId++, type:'potion', icon:'🧪', rarity:RARITIES[0], name:'Poción de Vida', heal:{hp:60+lv*6, mp:0}, qty:1 }
+    : { id:itemId++, type:'potion', icon:'🔷', rarity:RARITIES[0], name:'Poción de Maná', heal:{hp:0, mp:40+lv*4}, qty:1 };
+}
+function rollLoot(e){
+  const items = [];
+  const gold = Math.floor((4 + e.lv*3) * (e.isBoss?10:1) * (0.7+Math.random()*0.6));
+  if(gold>0) items.push({ gold });
+  if(Math.random() < (e.isBoss?1:0.35)) items.push(makePotion(Math.random()<0.6?'hp':'mp', e.lv));
+  if(Math.random() < (e.isBoss?1:0.28)){
+    const types=['weapon','armor','accessory'], n=e.isBoss?2:1;
+    for(let i=0;i<n;i++) items.push(makeGear(types[Math.floor(Math.random()*3)], e.lv, rollRarity(e.isBoss)));
+  }
+  return items;
+}
+function spawnDrop(item, pos){
+  const color = item.gold ? '#ffd166' : item.rarity.color;
+  const geo = item.gold ? new THREE.SphereGeometry(0.5,10,10) : new THREE.BoxGeometry(0.9,0.9,0.9);
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    color, emissive:color, emissiveIntensity:.9, metalness:.4, roughness:.3 }));
+  m.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*2, 1.3, (Math.random()-.5)*2));
+  m.castShadow = true; scene.add(m);
+  drops.push({ mesh:m, item, baseY:m.position.y, t:Math.random()*6 });
+}
+function pickup(d){
+  scene.remove(d.mesh);
+  const i = drops.indexOf(d); if(i>=0) drops.splice(i,1);
+  if(d.item.gold){
+    player.gold += d.item.gold;
+    floatText(hero.position.clone().add(new THREE.Vector3(0,6,0)), '+'+d.item.gold+' oro', 'heal');
+  } else {
+    addToInventory(d.item);
+    floatText(hero.position.clone().add(new THREE.Vector3(0,6,0)), d.item.icon+' '+d.item.name, 'player');
+  }
+  updateHUD(); if(inventoryOpen) renderInventory();
+}
+function addToInventory(item){
+  if(item.type==='potion'){
+    const ex = inventory.find(it=>it.type==='potion' && it.name===item.name);
+    if(ex){ ex.qty += item.qty; return; }
+  }
+  inventory.push(item);
+}
+function equipBonus(){
+  const b = { atk:0, def:0, hpMax:0, mpMax:0 };
+  for(const slot of ['weapon','armor','accessory']){
+    const it = equipment[slot]; if(!it) continue;
+    b.atk+=it.stats.atk; b.def+=it.stats.def; b.hpMax+=it.stats.hpMax; b.mpMax+=it.stats.mpMax;
+  }
+  return b;
+}
+function recomputeStats(){
+  const b = equipBonus();
+  player.hpMax = player.base.hpMax + b.hpMax;
+  player.mpMax = player.base.mpMax + b.mpMax;
+  player.atk   = player.base.atk + b.atk;
+  player.def   = player.base.def + b.def;
+  player.hp = Math.min(player.hp, player.hpMax);
+  player.mp = Math.min(player.mp, player.mpMax);
+}
+function equipItem(item){
+  const slot = item.slot, cur = equipment[slot];
+  const idx = inventory.indexOf(item); if(idx>=0) inventory.splice(idx,1);
+  equipment[slot] = item;
+  if(cur) inventory.push(cur);
+  recomputeStats(); updateHUD(); renderInventory(); saveGame();
+  toastMsg('Equipado: '+item.name, item.rarity.color, 20);
+}
+function unequip(slot){
+  const cur = equipment[slot]; if(!cur) return;
+  equipment[slot] = null; inventory.push(cur);
+  recomputeStats(); updateHUD(); renderInventory(); saveGame();
+}
+function usePotion(item){
+  if(item.heal.hp) player.hp = Math.min(player.hpMax, player.hp + item.heal.hp);
+  if(item.heal.mp) player.mp = Math.min(player.mpMax, player.mp + item.heal.mp);
+  floatText(hero.position.clone().add(new THREE.Vector3(0,6,0)),
+    (item.heal.hp? '+'+item.heal.hp+' HP':'+'+item.heal.mp+' MP'), 'heal');
+  item.qty--; if(item.qty<=0){ const i=inventory.indexOf(item); if(i>=0) inventory.splice(i,1); }
+  updateHUD(); renderInventory();
+}
+function statLine(it){
+  const s = it.stats||{}, parts=[];
+  if(s.atk) parts.push('ATK +'+s.atk);
+  if(s.def) parts.push('DEF +'+s.def);
+  if(s.hpMax) parts.push('HP +'+s.hpMax);
+  if(s.mpMax) parts.push('MP +'+s.mpMax);
+  return parts.join(' · ');
+}
+function slotName(s){ return s==='weapon'?'Arma':s==='armor'?'Armadura':'Accesorio'; }
+function renderInventory(){
+  const panel = document.getElementById('inventory');
+  panel.style.display = inventoryOpen ? 'block' : 'none';
+  if(!inventoryOpen) return;
+  document.getElementById('inv-gold').textContent = player.gold;
+  document.getElementById('inv-stats').innerHTML =
+    `⚔️ ATK ${player.atk}&nbsp;&nbsp; 🛡️ DEF ${player.def}&nbsp;&nbsp; ❤️ HP ${player.hpMax}&nbsp;&nbsp; 🔷 MP ${player.mpMax}`;
+  const eq = document.getElementById('inv-equipped'); eq.innerHTML='';
+  for(const slot of ['weapon','armor','accessory']){
+    const it = equipment[slot], cell = document.createElement('div'); cell.className='slot';
+    if(it){ cell.style.borderColor = it.rarity.color;
+      cell.innerHTML = `<div class="ic">${it.icon}</div><div class="nm" style="color:${it.rarity.color}">${it.name}</div><div class="st">${statLine(it)}</div>`;
+      cell.title='Click para quitar'; cell.onclick=()=>unequip(slot);
+    } else { cell.classList.add('empty'); cell.innerHTML = `<div class="ic">＋</div><div class="nm">${slotName(slot)}</div>`; }
+    eq.appendChild(cell);
+  }
+  const grid = document.getElementById('inv-grid'); grid.innerHTML='';
+  if(inventory.length===0) grid.innerHTML='<div class="empty-msg">La mochila está vacía. ¡Derrotá enemigos para conseguir botín!</div>';
+  for(const it of inventory){
+    const cell = document.createElement('div'); cell.className='item';
+    cell.style.borderColor = it.rarity ? it.rarity.color : '#888';
+    const qty = it.qty>1 ? `<span class="qty">x${it.qty}</span>` : '';
+    cell.innerHTML = `<div class="ic">${it.icon}</div>${qty}`;
+    cell.title = it.name + (it.type!=='potion' ? ' — '+statLine(it) : '');
+    cell.onclick = ()=>{ if(it.type==='potion') usePotion(it); else equipItem(it); };
+    grid.appendChild(cell);
+  }
+}
+
+// ============================================================
+//  SHOP / MERCHANT
+// ============================================================
+let shopOpen = false, nearMerchant = false;
+const shopStock = [];
+
+function itemValue(item){
+  if(item.gold) return item.gold;
+  if(item.type==='potion') return 16 + Math.round((item.heal.hp||item.heal.mp)*0.35);
+  const s = item.stats;
+  const sum = s.atk + s.def + s.hpMax*0.4 + s.mpMax*0.5;
+  return Math.floor((6 + item.lv*3 + sum) * item.rarity.mult);
+}
+function sellValue(item){ return Math.max(1, Math.floor(itemValue(item) * 0.4)); }
+
+function restockShop(){
+  shopStock.length = 0;
+  shopStock.push(makePotion('hp', player.lv));
+  shopStock.push(makePotion('mp', player.lv));
+  for(let i=0;i<5;i++){
+    const t = ['weapon','armor','accessory'][i % 3];
+    shopStock.push(makeGear(t, Math.max(1, player.lv + THREE.MathUtils.randInt(-1,2)), rollRarity(false)));
+  }
+}
+function buyItem(item){
+  const price = itemValue(item);
+  if(player.gold < price){ toastMsg('Oro insuficiente', '#ff6b6b', 18); return; }
+  player.gold -= price;
+  if(item.type==='potion'){ addToInventory(makePotion(item.heal.hp?'hp':'mp', item.lv)); }
+  else { const i = shopStock.indexOf(item); if(i>=0) shopStock.splice(i,1); addToInventory(item); }
+  toastMsg('Comprado: '+item.name, item.rarity.color, 18);
+  updateHUD(); renderShop(); if(inventoryOpen) renderInventory(); saveGame();
+}
+function sellItem(item){
+  const price = sellValue(item);
+  if(item.type==='potion'){ item.qty--; if(item.qty<=0){ const i=inventory.indexOf(item); if(i>=0) inventory.splice(i,1); } }
+  else { const i = inventory.indexOf(item); if(i>=0) inventory.splice(i,1); }
+  player.gold += price;
+  toastMsg('Vendido: +'+price+' oro', '#ffd166', 18);
+  updateHUD(); renderShop(); saveGame();
+}
+function refreshStock(){
+  if(player.gold < 30){ toastMsg('Oro insuficiente', '#ff6b6b', 18); return; }
+  player.gold -= 30; restockShop(); updateHUD(); renderShop();
+}
+function renderShop(){
+  const panel = document.getElementById('shop');
+  panel.style.display = shopOpen ? 'block' : 'none';
+  if(!shopOpen) return;
+  document.getElementById('shop-gold').textContent = player.gold;
+  // comprar
+  const buy = document.getElementById('shop-buy'); buy.innerHTML = '';
+  for(const it of shopStock){
+    const price = itemValue(it), can = player.gold >= price;
+    const row = document.createElement('div'); row.className = 'srow'+(can?'':' off');
+    const info = it.type==='potion' ? statLineP(it) : statLine(it);
+    row.innerHTML = `<span class="ic">${it.icon}</span>
+      <span class="info"><b style="color:${it.rarity.color}">${it.name}</b><small>${info}</small></span>
+      <span class="price">🪙 ${price}</span>`;
+    row.onclick = ()=> buyItem(it);
+    buy.appendChild(row);
+  }
+  // vender
+  const sell = document.getElementById('shop-sell'); sell.innerHTML = '';
+  if(inventory.length===0) sell.innerHTML = '<div class="empty-msg">No tenés objetos para vender.</div>';
+  for(const it of inventory){
+    const price = sellValue(it);
+    const row = document.createElement('div'); row.className = 'srow';
+    const info = it.type==='potion' ? ('x'+it.qty) : statLine(it);
+    row.innerHTML = `<span class="ic">${it.icon}</span>
+      <span class="info"><b style="color:${it.rarity?it.rarity.color:'#fff'}">${it.name}</b><small>${info}</small></span>
+      <span class="price sell">+🪙 ${price}</span>`;
+    row.onclick = ()=> sellItem(it);
+    sell.appendChild(row);
+  }
+}
+function statLineP(it){ return it.heal.hp ? 'Cura '+it.heal.hp+' HP' : 'Restaura '+it.heal.mp+' MP'; }
+
+// ---- merchant NPC + stall near spawn ----
+function textSprite(txt, color){
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 30px "Segoe UI", sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle = color || '#ffe9a8'; ctx.shadowColor='#000'; ctx.shadowBlur=6;
+  ctx.fillText(txt, 128, 34);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map:new THREE.CanvasTexture(cv), depthTest:false }));
+  s.scale.set(9, 2.25, 1); return s;
+}
+const merchant = (()=>{
+  const g = new THREE.Group();
+  // body (chibi vendor)
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(1.2,2.6,10),
+    new THREE.MeshStandardMaterial({color:0x8a4fff, roughness:.8}));
+  robe.position.y = 1.4; robe.castShadow = true; g.add(robe);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.8,16,16),
+    new THREE.MeshStandardMaterial({color:0xffe0bd})); head.position.y = 3.1; g.add(head);
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(1.0,1.0,12),
+    new THREE.MeshStandardMaterial({color:0xffd166})); hat.position.y = 3.9; g.add(hat);
+  // stall canopy
+  const post = new THREE.MeshStandardMaterial({color:0x7a4a2a});
+  for(const sx of [-2.5,2.5]) for(const sz of [-1.5,1.5]){
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,3.5), post);
+    p.position.set(sx,1.75,sz); g.add(p);
+  }
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(6,0.4,4),
+    new THREE.MeshStandardMaterial({color:0xff5d8f})); canopy.position.y = 3.6; canopy.castShadow=true; g.add(canopy);
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(6,0.6,1),
+    new THREE.MeshStandardMaterial({color:0x9a6a3a})); counter.position.set(0,1,1.6); g.add(counter);
+  const label = textSprite('🛒 Mercader Aoi', '#ffe9a8'); label.position.y = 5.2; g.add(label);
+  const mx = SPAWN.x + 16, mz = SPAWN.z + 6;
+  g.position.set(mx, groundHeight(mx,mz), mz);
+  scene.add(g);
+  return g;
+})();
+
+// ============================================================
+//  SAVE / LOAD  (localStorage)
+// ============================================================
+const SAVE_KEY = 'aetheria_save_v1';
+function serItem(it){ if(!it) return null; const c = {...it}; if(c.rarity) c.rarity = c.rarity.key; return c; }
+function deserItem(o){ if(!o) return null; const it = {...o};
+  if(it.rarity) it.rarity = ALL_RARITIES.find(r=>r.key===it.rarity) || RARITIES[0];
+  return it;
+}
+function saveGame(){
+  const data = {
+    itemId,
+    player: { lv:player.lv, xp:player.xp, xpNext:player.xpNext, hp:player.hp, mp:player.mp,
+              base:{...player.base}, gold:player.gold },
+    pos: { x:hero.position.x, z:hero.position.z },
+    inventory: inventory.map(serItem),
+    equipment: { weapon:serItem(equipment.weapon), armor:serItem(equipment.armor), accessory:serItem(equipment.accessory) },
+  };
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); flashSaved(); }
+  catch(err){ console.error('No se pudo guardar:', err); }
+}
+function loadGame(){
+  let raw; try { raw = localStorage.getItem(SAVE_KEY); } catch(e){ return false; }
+  if(!raw) return false;
+  try {
+    const d = JSON.parse(raw);
+    player.lv = d.player.lv; player.xp = d.player.xp; player.xpNext = d.player.xpNext;
+    player.gold = d.player.gold; player.base = {...d.player.base};
+    inventory.length = 0; (d.inventory||[]).forEach(o=> inventory.push(deserItem(o)));
+    equipment.weapon = deserItem(d.equipment.weapon);
+    equipment.armor = deserItem(d.equipment.armor);
+    equipment.accessory = deserItem(d.equipment.accessory);
+    if(d.itemId) itemId = d.itemId;
+    recomputeStats();
+    player.hp = Math.min(d.player.hp ?? player.hpMax, player.hpMax);
+    player.mp = Math.min(d.player.mp ?? player.mpMax, player.mpMax);
+    if(d.pos){ hero.position.x = d.pos.x; hero.position.z = d.pos.z; }
+    return true;
+  } catch(err){ console.error('Save corrupto:', err); return false; }
+}
+function wipeSave(){
+  if(!confirm('¿Borrar la partida guardada y empezar de cero?')) return;
+  try { localStorage.removeItem(SAVE_KEY); } catch(e){}
+  location.reload();
+}
+let savedT = 0;
+function flashSaved(){
+  const el = document.getElementById('save-indicator');
+  el.style.opacity = 1; savedT = 1.6;
+}
+
+// ============================================================
+//  ENEMIES
+// ============================================================
+const enemies = [];
+const enemyMatCache = {};
+function buildEnemy(zone, lv){
+  const g = new THREE.Group();
+  const tint = zone.tint;
+  const isBoss = Math.random() < 0.08;
+  const baseCol = new THREE.Color(tint);
+
+  // body — blobby anime monster
+  const bodyMat = new THREE.MeshStandardMaterial({color:tint, roughness:.7, flatShading:true,
+    emissive:baseCol.clone().multiplyScalar(0.15)});
+  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4,0), bodyMat);
+  body.position.y = 1.5; body.castShadow=true; g.add(body);
+  // eyes
+  for (const sx of [-0.5,0.5]){
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.34,10,10), new THREE.MeshStandardMaterial({color:0xffffff}));
+    e.position.set(sx,1.8,1.05); g.add(e);
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.16,8,8), new THREE.MeshStandardMaterial({color:0x111111}));
+    p.position.set(sx,1.8,1.32); g.add(p);
+  }
+  // little horns / spikes for higher zones
+  if (zone.lv[0] >= 13){
+    for (let i=0;i<2;i++){
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.25,0.9,6),
+        new THREE.MeshStandardMaterial({color:0x222233}));
+      horn.position.set(-0.6+i*1.2, 2.7, 0); horn.castShadow=true; g.add(horn);
+    }
+  }
+  const scale = (isBoss?1.9:1) * (0.85 + lv*0.012);
+  g.scale.setScalar(scale);
+
+  const hpMax = Math.floor((28 + lv*16) * (isBoss?6:1));
+  const e = {
+    mesh: g, zone, lv, isBoss, bodyMat,
+    name: (isBoss?'★ '+zone.enemy+' Jefe':zone.enemy),
+    hp: hpMax, hpMax,
+    atk: Math.floor(5 + lv*2.4) * (isBoss?1.6:1),
+    def: Math.floor(lv*0.8),
+    xp: Math.floor((12 + lv*10) * (isBoss?8:1)),
+    state:'idle', target:null, attackCd:0, hurtT:0,
+    home: new THREE.Vector3(), wanderT: 0, dir: new THREE.Vector3(),
+    alive:true, bob: Math.random()*Math.PI*2,
+  };
+  return e;
+}
+function spawnEnemy(zone){
+  const lv = THREE.MathUtils.randInt(zone.lv[0], zone.lv[1]);
+  const e = buildEnemy(zone, lv);
+  let x, z, tries = 0;
+  do { const a = Math.random()*Math.PI*2, rr = Math.sqrt(Math.random())*zone.r*0.9;
+       x = zone.x + Math.cos(a)*rr; z = zone.z + Math.sin(a)*rr; tries++;
+  } while(Math.hypot(x-SPAWN.x, z-SPAWN.z) < SAFE_R+10 && tries < 25);  // nunca dentro del santuario
+  e.mesh.position.set(x, groundHeight(x,z), z);
+  e.home.set(x, 0, z);
+  scene.add(e.mesh);
+  enemies.push(e);
+}
+ZONES.forEach(zo=>{ const n = zo.lv[0]>=31?7:14; for(let i=0;i<n;i++) spawnEnemy(zo); });
+
+// HP bar sprites above enemies
+const barTex = (()=>{ const c=document.createElement('canvas'); c.width=64;c.height=8; return c; })();
+function makeBar(){
+  const cv = document.createElement('canvas'); cv.width=80; cv.height=10;
+  const tex = new THREE.CanvasTexture(cv);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, depthTest:false}));
+  spr.scale.set(4,0.5,1);
+  return {cv, tex, spr};
+}
+enemies.forEach(e=>{
+  const b = makeBar(); e.bar = b; e.mesh.add(b.spr);
+  b.spr.position.y = 3.4;
+});
+function drawBar(e){
+  const ctx = e.bar.cv.getContext('2d');
+  ctx.clearRect(0,0,80,10);
+  ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(0,0,80,10);
+  const f = Math.max(0,e.hp/e.hpMax);
+  ctx.fillStyle = e.isBoss?'#ff3b3b':'#ff6b6b'; ctx.fillRect(1,1,78*f,8);
+  e.bar.tex.needsUpdate = true;
+}
+enemies.forEach(drawBar);
+
+// ============================================================
+//  WORLD BOSSES (uno por zona, con drop único garantizado)
+// ============================================================
+const BOSS_NAMES = {
+  'Pradera de Sakura': 'Mochiko, Reina Slime',
+  'Bosque Susurrante': 'Tamamo, Zorro de Nueve Colas',
+  'Desierto Ardiente': 'Sandalor, Coloso de Arena',
+  'Picos Helados':     'Yukihime, Doncella de Hielo',
+  'Abismo Demoníaco':  'Malphas, Señor del Vacío',
+};
+const UNIQUES = {
+  'Pradera de Sakura': { type:'accessory', icon:'🌸', name:'Lágrima de Mochiko',        stats:{atk:10, def:8,  hpMax:80,  mpMax:40 } },
+  'Bosque Susurrante': { type:'weapon',    icon:'🦊', name:'Cola Espectral de Tamamo',  stats:{atk:48, def:12, hpMax:0,   mpMax:50 } },
+  'Desierto Ardiente': { type:'armor',     icon:'🗿', name:'Núcleo del Coloso',         stats:{atk:14, def:60, hpMax:240, mpMax:0  } },
+  'Picos Helados':     { type:'weapon',    icon:'❄️', name:'Lanza de Escarcha Eterna',  stats:{atk:105,def:24, hpMax:90,  mpMax:60 } },
+  'Abismo Demoníaco':  { type:'accessory', icon:'👁️', name:'Corona del Vacío',          stats:{atk:70, def:45, hpMax:340, mpMax:180} },
+};
+function makeUnique(zone){
+  const t = UNIQUES[zone.name];
+  return { id:itemId++, type:t.type, slot:t.type, icon:t.icon, rarity:UNIQUE_RARITY,
+           lv:zone.lv[1]+3, name:t.name, stats:{...t.stats}, unique:true };
+}
+function buildBoss(zone){
+  const lv = zone.lv[1] + 3;                 // un poco por encima del tope de zona
+  const tint = zone.tint, baseCol = new THREE.Color(tint);
+  const g = new THREE.Group();               // raíz sin escalar (para barra/nombre)
+  const vis = new THREE.Group();             // cuerpo visual, escalado
+  const bodyMat = new THREE.MeshStandardMaterial({color:tint, roughness:.55, flatShading:true,
+    emissive:baseCol.clone().multiplyScalar(0.3), emissiveIntensity:.4});
+  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1.6,0), bodyMat);
+  body.position.y=1.6; body.castShadow=true; vis.add(body);
+  for(const sx of [-0.55,0.55]){
+    const e=new THREE.Mesh(new THREE.SphereGeometry(0.42,10,10),
+      new THREE.MeshStandardMaterial({color:0xffee66, emissive:0xff5500, emissiveIntensity:.6}));
+    e.position.set(sx,1.95,1.15); vis.add(e);
+    const p=new THREE.Mesh(new THREE.SphereGeometry(0.18,8,8), new THREE.MeshStandardMaterial({color:0x111111}));
+    p.position.set(sx,1.9,1.46); vis.add(p);
+  }
+  for(let i=0;i<4;i++){
+    const horn=new THREE.Mesh(new THREE.ConeGeometry(0.3,1.4,6), new THREE.MeshStandardMaterial({color:0x14141f}));
+    horn.position.set(-1.0+i*0.66, 3.0, -0.1); horn.rotation.z=(i-1.5)*0.22; horn.castShadow=true; vis.add(horn);
+  }
+  const crown=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.95,0.55,8),
+    new THREE.MeshStandardMaterial({color:0xffd166, metalness:.8, roughness:.2, emissive:0x553300, emissiveIntensity:.5}));
+  crown.position.y=3.3; vis.add(crown);
+  vis.scale.setScalar(2.6); g.add(vis);
+  const label = textSprite('☠ '+BOSS_NAMES[zone.name], '#ff8d8d'); label.position.y=9.5; g.add(label);
+
+  const hpMax = Math.floor((28 + lv*16) * 18);
+  return {
+    mesh:g, zone, lv, isBoss:true, isWorldBoss:true, bodyMat,
+    name:'☠ '+BOSS_NAMES[zone.name],
+    hp:hpMax, hpMax,
+    atk: Math.floor((5 + lv*2.4) * 2.0),
+    def: Math.floor(lv*1.2),
+    xp: Math.floor((12 + lv*10) * 20),
+    state:'idle', target:null, attackCd:0, hurtT:0,
+    home:new THREE.Vector3(), wanderT:0, dir:new THREE.Vector3(),
+    alive:true, bob:Math.random()*Math.PI*2,
+  };
+}
+function spawnBoss(zone){
+  const e = buildBoss(zone);
+  const bx = zone.x, bz = zone.z - zone.r*0.55;   // dentro de la zona, lejos del centro/spawn
+  e.mesh.position.set(bx, groundHeight(bx,bz), bz);
+  e.home.set(bx, 0, bz);
+  scene.add(e.mesh);
+  const b = makeBar(); e.bar = b; e.mesh.add(b.spr);
+  b.spr.position.y = 8.5; b.spr.scale.set(8, 0.9, 1);
+  drawBar(e);
+  enemies.push(e);
+  return e;
+}
+ZONES.forEach(spawnBoss);
+
+// ============================================================
+//  INPUT
+// ============================================================
+const keys = {};
+addEventListener('keydown', e=>{ keys[e.code]=true;
+  if(e.code==='Tab'){ e.preventDefault(); targetNearest(); }
+  if(e.code==='Digit1') castSkill(1);
+  if(e.code==='Digit2') castSkill(2);
+  if(e.code==='Digit3') castSkill(3);
+  if(e.code==='KeyI'){ inventoryOpen=!inventoryOpen; renderInventory(); }
+  if(e.code==='KeyE' && (nearMerchant || shopOpen)){
+    shopOpen = !shopOpen;
+    if(shopOpen && shopStock.length===0) restockShop();
+    renderShop();
+  }
+  if(e.code==='KeyK') saveGame();
+});
+addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+let yaw = 0, pitch = 0.4, camDist = 16;
+let dragging = false;
+const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+function ownerEnemy(obj){ while(obj){ const e = enemies.find(en=>en.mesh===obj); if(e) return e; obj=obj.parent; } return null; }
+function pickEnemyAt(ev){
+  ndc.x = (ev.clientX/innerWidth)*2-1; ndc.y = -(ev.clientY/innerHeight)*2+1;
+  ray.setFromCamera(ndc, camera);
+  const hits = ray.intersectObjects(enemies.filter(e=>e.alive).map(e=>e.mesh), true);
+  if(hits.length){ const e = ownerEnemy(hits[0].object); if(e){ target=e; updateTargetFrame(); return true; } }
+  return false;
+}
+renderer.domElement.addEventListener('mousedown', e=>{
+  if(e.button===0){ pickEnemyAt(e); meleeAttack(); }  // click izq = fijar enemigo bajo el cursor + atacar
+  if(e.button===2 || e.button===1){ dragging=true; }  // click der / rueda = orbitar cámara
+});
+addEventListener('mouseup', ()=> dragging=false);
+addEventListener('mousemove', e=>{
+  if(dragging){ yaw += e.movementX*0.004; pitch = THREE.MathUtils.clamp(pitch + e.movementY*0.004, 0.05, 1.2); }
+});
+addEventListener('wheel', e=>{ camDist = THREE.MathUtils.clamp(camDist + e.deltaY*0.02, 8, 30); });
+addEventListener('contextmenu', e=> e.preventDefault());
+document.querySelectorAll('.skill').forEach(el=>{
+  el.addEventListener('click', ()=>{ const s=+el.dataset.skill; if(s===0) meleeAttack(); else castSkill(s); });
+});
+
+// ============================================================
+//  TARGETING
+// ============================================================
+let target = null;
+function targetNearest(){
+  let best=null, bd=60;
+  for(const e of enemies){ if(!e.alive) continue;
+    const d = e.mesh.position.distanceTo(hero.position);
+    if(d<bd){ bd=d; best=e; } }
+  target = best; updateTargetFrame();
+}
+function updateTargetFrame(){
+  const tf = document.getElementById('target-frame');
+  if(!target || !target.alive){ tf.style.display='none'; target=null; return; }
+  tf.style.display='block';
+  document.getElementById('tname').textContent = target.name+' ';
+  document.getElementById('tlevel').textContent = 'Nv. '+target.lv;
+  const f = Math.max(0,target.hp/target.hpMax);
+  tf.querySelector('.hp > span').style.width = (f*100)+'%';
+  document.getElementById('t-hp-label').textContent = Math.max(0,Math.ceil(target.hp))+'/'+target.hpMax;
+}
+
+// ============================================================
+//  COMBAT
+// ============================================================
+const cooldowns = [0,0,0,0];
+const SKILLS = {
+  1:{ name:'Llama Carmesí', mp:12, cd:3, mult:2.4, color:'#ff7b3a', range:14 },
+  2:{ name:'Rayo Veloz',    mp:16, cd:5, mult:3.2, color:'#ffe066', range:22 },
+  3:{ name:'Corte Estelar', mp:24, cd:8, mult:4.5, color:'#c77dff', range:16 },
+};
+
+function meleeAttack(){
+  if(player.attackT>0) return;
+  player.attackT = 0.35;
+  // hit enemies in a frontal arc
+  const fwd = new THREE.Vector3(Math.sin(hero.rotation.y),0,Math.cos(hero.rotation.y));
+  let hitAny=false;
+  for(const e of enemies){ if(!e.alive) continue;
+    const to = e.mesh.position.clone().sub(hero.position); to.y=0;
+    const dist = to.length();
+    if(dist<7){ const dot = to.normalize().dot(fwd);
+      if(dot>0.3){ dealDamage(e, player.atk*(0.9+Math.random()*0.3)); hitAny=true; } }
+  }
+  if(hitAny && (!target||!target.alive)) targetNearest();
+}
+
+function castSkill(n){
+  const s = SKILLS[n]; if(!s) return;
+  if(cooldowns[n]>0) return;
+  if(player.mp < s.mp){ toastMsg('¡MP insuficiente!', '#ff6b6b', 18); return; }
+  if(!target || !target.alive){ targetNearest(); }
+  if(!target || !target.alive){ toastMsg('Sin objetivo', '#ffd166', 18); return; }
+  if(target.mesh.position.distanceTo(hero.position) > s.range){ toastMsg('Fuera de rango', '#ffd166', 18); return; }
+  player.mp -= s.mp;
+  cooldowns[n] = s.cd;
+  player.attackT = 0.3;
+  // VFX projectile
+  spawnBolt(hero.position.clone().add(new THREE.Vector3(0,3,0)), target.mesh.position.clone().add(new THREE.Vector3(0,1.5,0)), s.color);
+  setTimeout(()=>{ if(target&&target.alive) dealDamage(target, player.atk*s.mult, true); }, 180);
+  toastMsg(s.name, s.color, 24);
+  updateHUD();
+}
+
+const bolts = [];
+function spawnBolt(from, to, colorHex){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.6,10,10),
+    new THREE.MeshStandardMaterial({color:colorHex, emissive:colorHex, emissiveIntensity:1}));
+  m.position.copy(from); scene.add(m);
+  const light = new THREE.PointLight(colorHex, 3, 14); m.add(light);
+  bolts.push({m, from, to:to.clone(), t:0});
+}
+
+function dealDamage(e, amount, isSkill=false){
+  if(!e.alive) return;
+  const crit = Math.random()<0.18;
+  let dmg = Math.max(1, Math.floor((amount - e.def) * (crit?1.8:1)));
+  e.hp -= dmg; e.hurtT = 0.2;
+  drawBar(e);
+  floatText(e.mesh.position.clone().add(new THREE.Vector3(0,3.6,0)), '-'+dmg, crit?'enemy crit':'enemy');
+  // knockback (los jefes casi no se mueven) + sacudida de cámara
+  const kb = e.mesh.position.clone().sub(hero.position); kb.y = 0;
+  if(kb.lengthSq()>0){ kb.normalize().multiplyScalar(e.isWorldBoss?0.25 : (crit?2.0:1.2)); e.mesh.position.add(kb); }
+  shakeCam(crit?0.4:0.18);
+  // aggro
+  e.state='chase'; e.target=hero;
+  if(target===e) updateTargetFrame();
+  if(e.hp<=0) killEnemy(e);
+  else if(!target){ target=e; updateTargetFrame(); }
+}
+
+function killEnemy(e){
+  e.alive=false;
+  // death poof (más grande para jefes)
+  const puffs = e.isWorldBoss ? 30 : 10;
+  for(let i=0;i<puffs;i++){
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.3,6,6),
+      new THREE.MeshBasicMaterial({color: e.isWorldBoss?UNIQUE_RARITY.color:e.zone.tint}));
+    p.position.copy(e.mesh.position).add(new THREE.Vector3(0, e.isWorldBoss?3:1.5, 0));
+    p.userData.v = new THREE.Vector3((Math.random()-.5)*(e.isWorldBoss?16:8),Math.random()*(e.isWorldBoss?14:8),(Math.random()-.5)*(e.isWorldBoss?16:8));
+    p.userData.life=0.8; scene.add(p); particles.push(p);
+  }
+  scene.remove(e.mesh);
+  gainXP(e.xp);
+  if(target===e){ target=null; updateTargetFrame(); }
+
+  if(e.isWorldBoss){
+    // drop ÚNICO garantizado + oro extra + botín normal
+    spawnDrop(makeUnique(e.zone), e.mesh.position);
+    spawnDrop({ gold: Math.floor(60 + e.lv*10) }, e.mesh.position);
+    for(const it of rollLoot(e)) spawnDrop(it, e.mesh.position);
+    toastMsg('¡'+e.name.replace('☠ ','')+' derrotado! · Drop ÚNICO obtenido', UNIQUE_RARITY.color, 28);
+    saveGame();
+    setTimeout(()=>{                              // el jefe reaparece tras 45s
+      const i = enemies.indexOf(e); if(i>=0) enemies.splice(i,1);
+      spawnBoss(e.zone);
+    }, 45000);
+    return;
+  }
+
+  for(const it of rollLoot(e)) spawnDrop(it, e.mesh.position);   // botín normal
+  setTimeout(()=>{                                // respawn normal en la zona
+    const i = enemies.indexOf(e); if(i>=0) enemies.splice(i,1);
+    spawnEnemy(e.zone);
+    const ne = enemies[enemies.length-1];
+    const b=makeBar(); ne.bar=b; ne.mesh.add(b.spr); b.spr.position.y=3.4; drawBar(ne);
+  }, 6000);
+}
+
+const particles = [];
+
+function gainXP(amount){
+  player.xp += amount;
+  floatText(hero.position.clone().add(new THREE.Vector3(0,6,0)), '+'+amount+' XP', 'player');
+  while(player.xp >= player.xpNext){
+    player.xp -= player.xpNext;
+    levelUp();
+  }
+  updateHUD();
+}
+function levelUp(){
+  player.lv++;
+  player.xpNext = xpForLevel(player.lv+1);
+  player.base.hpMax += 18; player.base.mpMax += 8;
+  player.base.atk += 4; player.base.def += 2;
+  recomputeStats();
+  player.hp = player.hpMax; player.mp = player.mpMax;
+  toastMsg('¡SUBISTE A NIVEL '+player.lv+'!', '#ffd166', 40);
+  // level up ring
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1,1.4,32),
+    new THREE.MeshBasicMaterial({color:0xffd166, side:THREE.DoubleSide, transparent:true}));
+  ring.rotation.x=-Math.PI/2; ring.position.copy(hero.position).add(new THREE.Vector3(0,0.5,0));
+  ring.userData.life=1; scene.add(ring); levelRings.push(ring);
+  updateHUD(); saveGame();
+}
+const levelRings = [];
+
+// ============================================================
+//  UI HELPERS
+// ============================================================
+function updateHUD(){
+  document.getElementById('plevel').textContent = 'Nv. '+player.lv;
+  document.querySelector('#player-frame .hp > span').style.width = Math.max(0,player.hp/player.hpMax*100)+'%';
+  document.querySelector('#player-frame .mp > span').style.width = Math.max(0,player.mp/player.mpMax*100)+'%';
+  document.querySelector('#player-frame .xp > span').style.width = (player.xp/player.xpNext*100)+'%';
+  document.getElementById('hp-label').textContent = Math.ceil(player.hp)+'/'+player.hpMax;
+  document.getElementById('mp-label').textContent = Math.ceil(player.mp)+'/'+player.mpMax;
+  document.getElementById('xp-label').textContent = 'XP '+Math.floor(player.xp/player.xpNext*100)+'%';
+  const pg = document.getElementById('pgold'); if(pg) pg.textContent = '🪙 '+player.gold+' oro';
+}
+function floatText(world3, text, cls){
+  const v = world3.clone().project(camera);
+  if(v.z>1) return;
+  const x = (v.x*0.5+0.5)*innerWidth, y = (-v.y*0.5+0.5)*innerHeight;
+  const el = document.createElement('div');
+  el.className = 'dmg '+cls; el.textContent = text;
+  el.style.left = x+'px'; el.style.top = y+'px';
+  document.getElementById('fct').appendChild(el);
+  setTimeout(()=>el.remove(), 1000);
+}
+let toastT=0;
+function toastMsg(text, color, size){
+  const t = document.getElementById('toast');
+  t.textContent = text; t.style.color = color; t.style.fontSize = size+'px';
+  t.style.opacity = 1; toastT = 1.2;
+}
+let zoneBannerT=0, curZone=null;
+function showZone(zo){
+  const b = document.getElementById('zone-banner');
+  b.innerHTML = zo.name + '<small>'+zo.sub+'</small>';
+  b.style.color = '#fff';
+  b.style.opacity = 1; zoneBannerT = 3;
+}
+
+// ============================================================
+//  MINIMAP
+// ============================================================
+const mm = document.getElementById('mm'), mmx = mm.getContext('2d');
+function drawMinimap(){
+  const W=340, scale=W/(WORLD*2);
+  mmx.clearRect(0,0,W,W);
+  mmx.fillStyle='#10142e'; mmx.fillRect(0,0,W,W);
+  for(const zo of ZONES){
+    mmx.beginPath();
+    mmx.fillStyle = '#'+new THREE.Color(zo.color).getHexString()+'aa';
+    mmx.globalAlpha=0.55;
+    mmx.arc((zo.x+WORLD)*scale,(zo.z+WORLD)*scale, zo.r*scale, 0, Math.PI*2);
+    mmx.fill(); mmx.globalAlpha=1;
+  }
+  // enemies (los jefes de zona en dorado y más grandes)
+  for(const e of enemies){ if(!e.alive) continue;
+    mmx.fillStyle = e.isWorldBoss ? '#ffd166' : '#ff5d6c';
+    const s2 = e.isWorldBoss ? 8 : (e.isBoss?5:2);
+    mmx.fillRect((e.mesh.position.x+WORLD)*scale - s2/2,(e.mesh.position.z+WORLD)*scale - s2/2, s2, s2); }
+  // player
+  mmx.fillStyle='#ffd166'; mmx.beginPath();
+  mmx.arc((hero.position.x+WORLD)*scale,(hero.position.z+WORLD)*scale,4,0,Math.PI*2); mmx.fill();
+  // facing line
+  mmx.strokeStyle='#ffd166'; mmx.beginPath();
+  mmx.moveTo((hero.position.x+WORLD)*scale,(hero.position.z+WORLD)*scale);
+  mmx.lineTo((hero.position.x+WORLD)*scale+Math.sin(hero.rotation.y)*10,(hero.position.z+WORLD)*scale+Math.cos(hero.rotation.y)*10);
+  mmx.stroke();
+}
+
+// ============================================================
+//  GAME LOOP
+// ============================================================
+const clock = new THREE.Clock();
+let walkPhase=0, animT=0, shake=0;
+function shakeCam(a){ shake = Math.max(shake, a); }
+function hurtFlash(){
+  const el = document.getElementById('hurt-flash');
+  el.style.opacity = 0.5;
+  setTimeout(()=>{ el.style.opacity = 0; }, 70);
+}
+
+function animateHero(dt, moving, running, dashing){
+  animT += dt;
+  if(player.attackT>0) player.attackT -= dt;
+  const u = hero.userData, air = !player.onGround;
+  const k = Math.min(1, dt*18);
+
+  // roll: gira todo el cuerpo hacia adelante durante la esquiva
+  if(dashing){
+    const p = 1 - Math.max(0,player.dashT)/0.4;
+    u.body.rotation.x = p * Math.PI*2;
+  } else {
+    u.body.rotation.x += (0 - u.body.rotation.x) * Math.min(1, dt*12);
+  }
+
+  // poses objetivo
+  let legL=0, legR=0, armL=0, armR=0, swordZ=0, torsoX=0, headZ=0, bodyY=0, torsoSY=1;
+
+  if(air){
+    legL=-0.5; legR=-0.9; armL=-1.7; armR=-1.7; bodyY=0.1;            // salto: piernas recogidas, brazos arriba
+  } else if(moving){
+    const amp = running ? 1.15 : 0.7, sw = Math.sin(walkPhase);
+    legL =  sw*amp; legR = -sw*amp;
+    armL = -sw*amp*0.9; armR = sw*amp*0.9;
+    torsoX = running ? 0.32 : 0.14;                                  // inclinación hacia adelante al correr
+    bodyY = Math.abs(Math.sin(walkPhase))*(running?0.28:0.16);       // rebote al pisar
+    headZ = Math.sin(walkPhase*0.5)*0.05;
+  } else {
+    const br = Math.sin(animT*2.2);                                  // idle: respiración + balanceo
+    bodyY = 0.05 + br*0.05;
+    armL = br*0.06 - 0.1; armR = Math.sin(animT*2.2+0.6)*0.06 - 0.1;
+    torsoSY = 1 + br*0.025;
+    headZ = Math.sin(animT*1.3)*0.07;
+  }
+
+  // overlay de ataque (pisa brazo derecho y espada)
+  if(player.attackT>0){
+    const p = 1 - Math.max(0,player.attackT)/0.35, swing = Math.sin(p*Math.PI);
+    armR = -2.3*swing - 0.2; swordZ = -2.5*swing; torsoX = 0.2 + 0.35*swing;
+  }
+
+  u.legL.rotation.x += (legL - u.legL.rotation.x)*k;
+  u.legR.rotation.x += (legR - u.legR.rotation.x)*k;
+  u.armL.rotation.x += (armL - u.armL.rotation.x)*k;
+  u.armR.rotation.x += (armR - u.armR.rotation.x)*k;
+  u.sword.rotation.z += (swordZ - u.sword.rotation.z)*k;
+  u.torso.rotation.x += (torsoX - u.torso.rotation.x)*k;
+  u.torso.scale.y    += (torsoSY - u.torso.scale.y)*k;
+  u.headG.rotation.z += (headZ - u.headG.rotation.z)*k;
+  u.body.position.y  += (bodyY - u.body.position.y)*k;
+
+  // parpadeo de invulnerabilidad durante la esquiva
+  u.body.visible = !(player.iframes>0 && Math.floor(animT*20)%2===0);
+}
+
+function update(dt){
+  // ---- movement (relativo a la cámara, así nunca queda invertido) ----
+  const running = (keys['ShiftLeft']||keys['ShiftRight']);
+  const speed = running ? 26 : 14;
+  const camForward = new THREE.Vector3();
+  camera.getWorldDirection(camForward); camForward.y = 0; camForward.normalize();
+  const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0,1,0)).normalize();
+  const move = new THREE.Vector3();
+  if(keys['KeyW']) move.add(camForward);   // adelante = hacia donde mira la cámara
+  if(keys['KeyS']) move.sub(camForward);
+  if(keys['KeyD']) move.add(camRight);
+  if(keys['KeyA']) move.sub(camRight);
+  const moving = move.lengthSq()>0;
+  if(moving) move.normalize();
+
+  // ---- esquiva / roll (Ctrl): ráfaga rápida + breve invulnerabilidad ----
+  player.dashCd = Math.max(0, (player.dashCd||0) - dt);
+  player.iframes = Math.max(0, (player.iframes||0) - dt);
+  if(keys['ControlLeft'] && !player.dashHeld && player.dashCd<=0 && player.onGround){
+    player.dashT = 0.4; player.dashCd = 0.9; player.iframes = 0.4;
+    player.dashDir = moving ? move.clone()
+      : new THREE.Vector3(Math.sin(hero.rotation.y),0,Math.cos(hero.rotation.y));
+    shakeCam(0.2);
+  }
+  player.dashHeld = !!keys['ControlLeft'];
+  const dashing = (player.dashT||0) > 0;
+
+  if(dashing){
+    player.dashT -= dt;
+    hero.position.x += player.dashDir.x * 42 * dt;
+    hero.position.z += player.dashDir.z * 42 * dt;
+    player.faceYaw = Math.atan2(player.dashDir.x, player.dashDir.z);
+    walkPhase += dt*20;
+  } else if(moving){
+    hero.position.x += move.x*speed*dt;
+    hero.position.z += move.z*speed*dt;
+    player.faceYaw = Math.atan2(move.x, move.z);
+    walkPhase += dt*speed*0.6;
+  }
+  // giro suave hacia la dirección de avance (en vez de saltar de golpe)
+  if(player.faceYaw !== undefined){
+    let d = player.faceYaw - hero.rotation.y;
+    while(d> Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2;
+    hero.rotation.y += d * Math.min(1, dt*14);
+  }
+  // bounds
+  hero.position.x = THREE.MathUtils.clamp(hero.position.x, -WORLD+10, WORLD-10);
+  hero.position.z = THREE.MathUtils.clamp(hero.position.z, -WORLD+10, WORLD-10);
+
+  // jump / gravity
+  if(player.onGround && keys['Space'] && !dashing){ player.vel.y = 15; player.onGround=false; }
+  player.vel.y -= 40*dt;
+  hero.userData.jumpY = (hero.userData.jumpY||0) + player.vel.y*dt;
+  if(hero.userData.jumpY <= 0){ hero.userData.jumpY=0; player.vel.y=0; player.onGround=true; }
+  const gh = groundHeight(hero.position.x, hero.position.z);
+  hero.position.y = gh + hero.userData.jumpY;
+
+  // ---- animación del héroe ----
+  animateHero(dt, moving, running, dashing);
+
+  // ---- camera follow ----
+  const camTarget = hero.position.clone().add(new THREE.Vector3(0,3.5,0));
+  const offset = new THREE.Vector3(
+    Math.sin(yaw)* -Math.cos(pitch)*camDist,
+    Math.sin(pitch)*camDist + 2,
+    Math.cos(yaw)* -Math.cos(pitch)*camDist
+  );
+  camera.position.lerp(camTarget.clone().add(offset), 0.15);
+  camera.lookAt(camTarget);
+  if(shake>0){ shake = Math.max(0, shake - dt*1.6);
+    const s = shake*2.2;
+    camera.position.x += (Math.random()-.5)*s;
+    camera.position.y += (Math.random()-.5)*s;
+    camera.position.z += (Math.random()-.5)*s;
+  }
+
+  // ---- zone detection ----
+  const zo = zoneAt(hero.position.x, hero.position.z);
+  if(zo !== curZone){ curZone = zo; showZone(zo); }
+
+  // ---- enemies AI ----
+  for(const e of enemies){ if(!e.alive) continue;
+    e.bob += dt*3;
+    const toP = hero.position.clone().sub(e.mesh.position); toP.y=0;
+    const dP = toP.length();
+    // aggro range (más suave en zonas de nivel bajo, no persiguen al santuario)
+    const aggro = e.zone.lv[0] <= 5 ? 13 : (e.zone.lv[0] <= 12 ? 18 : 24);
+    const playerSafe = inSafeZone(hero.position.x, hero.position.z);
+    if(dP < aggro && e.state==='idle' && !playerSafe) { e.state='chase'; }
+    if(e.state==='chase'){
+      if(dP > 60 || playerSafe || inSafeZone(e.mesh.position.x, e.mesh.position.z)){ e.state='return'; }
+      else if(dP > 3.2){
+        toP.normalize();
+        const es = 7 + e.lv*0.15;
+        e.mesh.position.x += toP.x*es*dt;
+        e.mesh.position.z += toP.z*es*dt;
+        e.mesh.rotation.y = Math.atan2(toP.x, toP.z);
+      } else {
+        // attack player
+        e.attackCd -= dt;
+        if(e.attackCd<=0){ e.attackCd = 1.4;
+          e.mesh.position.add(toP.clone().normalize().multiplyScalar(0.6));  // estocada
+          if(player.iframes>0){
+            floatText(hero.position.clone().add(new THREE.Vector3(0,5,0)), '¡Esquivó!', 'heal');
+          } else {
+            const dmg = Math.max(1, Math.floor(e.atk - player.def*0.5));
+            player.hp -= dmg;
+            floatText(hero.position.clone().add(new THREE.Vector3(0,5,0)), '-'+dmg, 'enemy');
+            hurtFlash(); shakeCam(0.3);
+            if(player.hp<=0) playerDeath();
+            updateHUD();
+          }
+        }
+      }
+    } else if(e.state==='return'){
+      const toH = e.home.clone().sub(e.mesh.position); toH.y=0;
+      if(toH.length()<2){ e.state='idle'; }
+      else { toH.normalize(); e.mesh.position.x+=toH.x*8*dt; e.mesh.position.z+=toH.z*8*dt; }
+    } else {
+      // idle wander
+      e.wanderT -= dt;
+      if(e.wanderT<=0){ e.wanderT = 2+Math.random()*3;
+        e.dir.set((Math.random()-.5),0,(Math.random()-.5)).normalize(); }
+      const nx = e.mesh.position.x + e.dir.x*2*dt, nz = e.mesh.position.z + e.dir.z*2*dt;
+      if(Math.hypot(nx-e.home.x, nz-e.home.z) < e.zone.r*0.9){ e.mesh.position.x=nx; e.mesh.position.z=nz; }
+    }
+    e.mesh.position.y = groundHeight(e.mesh.position.x, e.mesh.position.z) + Math.sin(e.bob)*0.2;
+    // hurt flash
+    if(e.bodyMat){ e.bodyMat.emissiveIntensity = (e.hurtT>0) ? 1 : (e.isWorldBoss?0.4:0.15); if(e.hurtT>0) e.hurtT-=dt; }
+    // face bar to camera handled by Sprite automatically
+  }
+
+  // ---- bolts ----
+  for(let i=bolts.length-1;i>=0;i--){ const b=bolts[i];
+    b.t += dt*3.5;
+    b.m.position.lerpVectors(b.from, b.to, Math.min(1,b.t));
+    if(b.t>=1){ scene.remove(b.m); bolts.splice(i,1); }
+  }
+  // ---- particles ----
+  for(let i=particles.length-1;i>=0;i--){ const p=particles[i];
+    p.userData.life-=dt; p.userData.v.y-=20*dt;
+    p.position.addScaledVector(p.userData.v, dt);
+    p.material.opacity = Math.max(0,p.userData.life);
+    p.material.transparent=true;
+    if(p.userData.life<=0){ scene.remove(p); particles.splice(i,1); }
+  }
+  // ---- level rings ----
+  for(let i=levelRings.length-1;i>=0;i--){ const ri=levelRings[i];
+    ri.userData.life-=dt; ri.scale.setScalar(1+(1-ri.userData.life)*8);
+    ri.material.opacity=Math.max(0,ri.userData.life);
+    if(ri.userData.life<=0){ scene.remove(ri); levelRings.splice(i,1); }
+  }
+
+  // ---- mercader (proximidad / prompt / auto-cierre) ----
+  const wasNear = nearMerchant;
+  nearMerchant = merchant.position.distanceTo(hero.position) < 9;
+  if(nearMerchant !== wasNear){
+    document.getElementById('shop-prompt').style.display = (nearMerchant && !shopOpen) ? 'block' : 'none';
+  }
+  if(shopOpen && !nearMerchant){ shopOpen=false; renderShop(); }
+  document.getElementById('shop-prompt').style.display = (nearMerchant && !shopOpen) ? 'block' : 'none';
+
+  // ---- loot drops (giran, flotan y se recogen al acercarse) ----
+  for(let i=drops.length-1;i>=0;i--){ const d=drops[i];
+    d.t += dt; d.mesh.rotation.y += dt*2;
+    d.mesh.position.y = d.baseY + Math.sin(d.t*3)*0.25;
+    if(d.mesh.position.distanceTo(hero.position) < 4) pickup(d);
+  }
+
+  // ---- regen (descanso rápido en el santuario) ----
+  const resting = inSafeZone(hero.position.x, hero.position.z);
+  player.hp = Math.min(player.hpMax, player.hp + (resting?45:3)*dt);
+  player.mp = Math.min(player.mpMax, player.mp + (resting?35:4)*dt);
+  document.getElementById('safe-indicator').style.display = resting ? 'block' : 'none';
+
+  // ---- cooldowns UI ----
+  for(let n=1;n<=3;n++){ if(cooldowns[n]>0){ cooldowns[n]-=dt;
+      const cd = document.querySelector(`.skill[data-skill="${n}"] .cd`);
+      cd.style.opacity=1; cd.textContent = Math.ceil(cooldowns[n]);
+      if(cooldowns[n]<=0) cd.style.opacity=0;
+  }}
+
+  // ---- target frame refresh ----
+  if(target && target.alive) updateTargetFrame();
+
+  // ---- timers ----
+  if(toastT>0){ toastT-=dt; if(toastT<=0) document.getElementById('toast').style.opacity=0; }
+  if(zoneBannerT>0){ zoneBannerT-=dt; if(zoneBannerT<=0) document.getElementById('zone-banner').style.opacity=0; }
+  if(savedT>0){ savedT-=dt; if(savedT<=0) document.getElementById('save-indicator').style.opacity=0; }
+
+  updateHUD();
+  drawMinimap();
+}
+
+let dead=false;
+function playerDeath(){
+  if(dead) return; dead=true;
+  toastMsg('Has caído... renaciendo', '#ff5d6c', 34);
+  setTimeout(()=>{
+    player.hp = player.hpMax; player.mp = player.mpMax;
+    hero.position.copy(SPAWN); hero.position.y=groundHeight(SPAWN.x,SPAWN.z); dead=false;
+    target=null; updateTargetFrame();
+  }, 2000);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, clock.getDelta());
+  try { update(dt); } catch(err){ console.error('update error:', err); }  // un bug no congela el juego
+  renderer.render(scene, camera);
+}
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// boot
+document.getElementById('shop-refresh').addEventListener('click', refreshStock);
+document.getElementById('wipe-save').addEventListener('click', wipeSave);
+const loaded = loadGame();                 // continúa la partida si existe
+if(!loaded) recomputeStats();
+if(loaded) toastMsg('Partida cargada', '#7CFC9A', 22);
+updateHUD();
+showZone(zoneAt(hero.position.x, hero.position.z));
+hero.position.y = groundHeight(hero.position.x, hero.position.z);
+setInterval(saveGame, 12000);              // autoguardado periódico
+addEventListener('beforeunload', saveGame);// guardar al cerrar/recargar
+setTimeout(()=>{ document.getElementById('loader').style.display='none'; }, 600);
+animate();
+</script>
+</body>
+</html>
