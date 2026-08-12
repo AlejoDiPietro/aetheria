@@ -41,6 +41,19 @@
   #tname { font-weight: 700; font-size: 14px; }
   #tlevel { font-size: 12px; color: #ff9f1c; }
 
+  /* Mira del centro: reemplaza a la flecha del sistema cuando el mouse está
+     capturado. Cruz hueca, con un punto en el medio, para que se lea sobre
+     cualquier fondo sin taparlo. */
+  #mira { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    margin: -11px 0 0 -11px; display: none; }
+  #mira i { position: absolute; background: rgba(255,255,255,.9);
+    box-shadow: 0 0 3px rgba(0,0,0,.9); }
+  #mira i:nth-child(1) { left: 10px; top: 0;  width: 2px; height: 7px; }
+  #mira i:nth-child(2) { left: 10px; bottom: 0; width: 2px; height: 7px; }
+  #mira i:nth-child(3) { top: 10px; left: 0;  height: 2px; width: 7px; }
+  #mira i:nth-child(4) { top: 10px; right: 0; height: 2px; width: 7px; }
+  #mira i:nth-child(5) { left: 9.5px; top: 9.5px; width: 3px; height: 3px; border-radius: 50%; }
+
   /* Zone banner */
   #zone-banner { position: absolute; top: 84px; left: 50%; transform: translateX(-50%);
     font-size: 26px; font-weight: 800; letter-spacing: 2px; opacity: 0;
@@ -208,8 +221,10 @@
     <div class="skill" data-skill="3"><span class="key">3</span><span class="ico">✨</span><div class="cd"></div></div>
   </div>
 
+  <div id="mira" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+
   <div id="hint" class="panel">
-    <b>WASD</b> mover · <b>Click der</b> cámara · <b>Click izq</b> atacar<br>
+    <b>WASD</b> mover · <b>L</b> capturar mouse · <b>Click der</b> cámara · <b>Click izq</b> atacar<br>
     <b>1/2/3</b> habilidades · <b>Espacio</b> saltar · <b>Shift</b> correr · <b>Ctrl</b> esquiva<br>
     <b>Tab</b> fijar · <b>I</b> inventario · <b>E</b> tienda · <b>K</b> guardar
   </div>
@@ -1038,11 +1053,16 @@ addEventListener('keydown', e=>{ keys[e.code]=true;
   if(e.code==='Digit1') castSkill(1);
   if(e.code==='Digit2') castSkill(2);
   if(e.code==='Digit3') castSkill(3);
-  if(e.code==='KeyI'){ inventoryOpen=!inventoryOpen; renderInventory(); }
+  if(e.code==='KeyL'){ mouseCapturado() ? soltarMouse() : capturarMouse(); }
+  if(e.code==='KeyI'){
+    inventoryOpen=!inventoryOpen; renderInventory();
+    inventoryOpen ? panelAbierto() : panelCerrado();
+  }
   if(e.code==='KeyE' && (nearMerchant || shopOpen)){
     shopOpen = !shopOpen;
     if(shopOpen && shopStock.length===0) restockShop();
     renderShop();
+    shopOpen ? panelAbierto() : panelCerrado();
   }
   if(e.code==='KeyK') saveGame();
 });
@@ -1052,8 +1072,52 @@ let yaw = 0, pitch = 0.4, camDist = 16;
 let dragging = false;
 const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
 function ownerEnemy(obj){ while(obj){ const e = enemies.find(en=>en.mesh===obj); if(e) return e; obj=obj.parent; } return null; }
+/* ============================================================
+   MOUSE CAPTURADO (tecla L)
+
+   Con el puntero capturado el mouse deja de ser una flecha encima de la
+   pantalla y pasa a ser la cámara: gira sin arrastrar ningún botón, no se
+   escapa de la ventana y no hay cursor tapando la escena. La mira del centro
+   ocupa su lugar, y pasa a ser también con lo que apuntás.
+   ============================================================ */
+const mira = document.getElementById('mira');
+let mouseEraCapturado = false;
+
+const mouseCapturado = () => document.pointerLockElement === renderer.domElement;
+
+function capturarMouse(){
+  if(mouseCapturado()) return;
+  /*
+    El navegador puede negarse: pide un gesto real del usuario y exige que la
+    ventana esté enfocada, y además impone una espera si acabás de salir. Un
+    fallo silencioso deja al jugador apretando L sin entender nada, así que
+    lo decimos en pantalla.
+  */
+  try {
+    const p = renderer.domElement.requestPointerLock();
+    if(p && p.catch) p.catch(()=> toastMsg('El navegador no dejó capturar el mouse · probá de nuevo', '#ffb4b4', 16));
+  } catch(err){
+    toastMsg('El navegador no dejó capturar el mouse · probá de nuevo', '#ffb4b4', 16);
+  }
+}
+function soltarMouse(){ if(mouseCapturado()) document.exitPointerLock(); }
+
+/* Los paneles necesitan la flecha de vuelta para poder clickear los objetos,
+   así que sueltan el mouse al abrirse y lo recuperan al cerrarse. */
+function panelAbierto(){ if(mouseCapturado()){ mouseEraCapturado = true; soltarMouse(); } }
+function panelCerrado(){ if(mouseEraCapturado){ mouseEraCapturado = false; capturarMouse(); } }
+
+document.addEventListener('pointerlockchange', ()=>{
+  const capturado = mouseCapturado();
+  mira.style.display = capturado ? 'block' : 'none';
+  dragging = false;            // si salió a mitad de un arrastre, que no siga girando
+  if(capturado) toastMsg('Mouse capturado · Esc o L para soltarlo', '#9ad7ff', 16);
+});
+
 function pickEnemyAt(ev){
-  ndc.x = (ev.clientX/innerWidth)*2-1; ndc.y = -(ev.clientY/innerHeight)*2+1;
+  // Sin flecha en pantalla se apunta con la mira, que siempre está en el centro.
+  if(mouseCapturado()){ ndc.x = 0; ndc.y = 0; }
+  else { ndc.x = (ev.clientX/innerWidth)*2-1; ndc.y = -(ev.clientY/innerHeight)*2+1; }
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObjects(enemies.filter(e=>e.alive).map(e=>e.mesh), true);
   if(hits.length){ const e = ownerEnemy(hits[0].object); if(e){ target=e; updateTargetFrame(); return true; } }
@@ -1068,7 +1132,8 @@ addEventListener('mousemove', e=>{
   // El yaw RESTA: la cámara mira hacia (sin yaw, 0, cos yaw), o sea hacia +X,
   // y +X cae a la izquierda de la pantalla. Sumando, arrastrar el mouse a la
   // derecha giraba la vista a la izquierda.
-  if(dragging){ yaw -= e.movementX*0.004; pitch = THREE.MathUtils.clamp(pitch + e.movementY*0.004, 0.05, 1.2); }
+  // Capturado gira siempre; suelto, sólo mientras arrastres con el botón derecho.
+  if(dragging || mouseCapturado()){ yaw -= e.movementX*0.004; pitch = THREE.MathUtils.clamp(pitch + e.movementY*0.004, 0.05, 1.2); }
 });
 addEventListener('wheel', e=>{ camDist = THREE.MathUtils.clamp(camDist + e.deltaY*0.02, 8, 30); });
 addEventListener('contextmenu', e=> e.preventDefault());
@@ -1652,7 +1717,7 @@ function update(dt){
   if(nearMerchant !== wasNear){
     document.getElementById('shop-prompt').style.display = (nearMerchant && !shopOpen) ? 'block' : 'none';
   }
-  if(shopOpen && !nearMerchant){ shopOpen=false; renderShop(); }
+  if(shopOpen && !nearMerchant){ shopOpen=false; renderShop(); panelCerrado(); }
   document.getElementById('shop-prompt').style.display = (nearMerchant && !shopOpen) ? 'block' : 'none';
 
   // ---- loot drops (giran, flotan y se recogen al acercarse) ----
