@@ -102,7 +102,7 @@
 
   /* Inventory */
   #inventory { display:none; top:50%; left:50%; transform:translate(-50%,-50%);
-    width:540px; max-width:94vw; padding:16px 18px; pointer-events:auto; }
+    width:760px; max-width:94vw; padding:16px 18px; pointer-events:auto; }
   #inventory h2 { font-size:18px; margin-bottom:6px; display:flex;
     justify-content:space-between; align-items:center; }
   #inventory h2 .gold { color:#ffd166; font-size:14px; }
@@ -115,8 +115,36 @@
   #inv-equipped .slot .ic { font-size:22px; }
   #inv-equipped .slot .nm { font-size:11px; font-weight:700; margin-top:2px; }
   #inv-equipped .slot .st { font-size:10px; color:#9fb0ff; margin-top:3px; line-height:1.3; }
-  #inv-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:8px;
-    min-height:120px; max-height:240px; overflow-y:auto; }
+  /* Tres columnas: mochila, personaje y ficha del objeto elegido. */
+  #inv-cuerpo { display:flex; gap:14px; align-items:flex-start; }
+  #inv-mochila { flex:1 1 260px; min-width:0; }
+  #inv-personaje { flex:0 0 150px; }
+  #inv-lienzo { width:150px; height:196px; border-radius:10px; overflow:hidden;
+    background:linear-gradient(180deg, rgba(60,80,160,.30), rgba(10,14,32,.55));
+    border:1px solid rgba(120,160,255,.28); }
+  #inv-lienzo canvas { display:block; width:100%; height:100%; }
+  #inv-detalle { flex:0 0 208px; min-height:196px; margin-top:20px; padding:11px 12px;
+    border-radius:10px; background:rgba(0,0,0,.32);
+    border:1px solid rgba(255,255,255,.14); font-size:12px; }
+  #inv-detalle .vacio { color:#8e9ac4; line-height:1.5; }
+  #inv-detalle .cab { display:flex; gap:8px; align-items:flex-start; }
+  #inv-detalle .cab .ic { font-size:26px; line-height:1; }
+  #inv-detalle .nm { font-weight:700; font-size:13px; line-height:1.25; }
+  #inv-detalle .rz { font-size:11px; margin-top:1px; }
+  #inv-detalle .stats { margin:10px 0 0; line-height:1.7; color:#cdd6ff; }
+  #inv-detalle .stats b { color:#fff; }
+  #inv-detalle .cmp { color:#9fb0ff; }
+  #inv-detalle .venta { margin-top:10px; padding-top:9px; font-size:11px; color:#ffd166;
+    border-top:1px solid rgba(255,255,255,.12); }
+  #inv-detalle button { width:100%; margin-top:10px; padding:8px; border:0; border-radius:8px;
+    background:#4a6cff; color:#fff; font-weight:700; font-size:12px; cursor:pointer;
+    font-family:inherit; }
+  #inv-detalle button:hover { background:#5d7cff; }
+  #inv-detalle button.quitar { background:rgba(255,255,255,.14); }
+
+  #inv-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:8px;
+    min-height:120px; max-height:196px; overflow-y:auto; align-content:start; }
+  #inv-grid .item.sel { box-shadow:0 0 0 2px #fff inset; transform:scale(1.06); }
   #inv-grid .item { aspect-ratio:1; border:2px solid #888; border-radius:10px;
     background:rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center;
     font-size:24px; cursor:pointer; position:relative; transition:transform .08s; }
@@ -248,10 +276,19 @@
     <div id="inv-stats"></div>
     <div class="inv-sub">Equipo</div>
     <div id="inv-equipped"></div>
-    <div class="inv-sub">Mochila</div>
-    <div id="inv-grid"></div>
+    <div id="inv-cuerpo">
+      <div id="inv-mochila">
+        <div class="inv-sub">Mochila</div>
+        <div id="inv-grid"></div>
+      </div>
+      <div id="inv-personaje">
+        <div class="inv-sub">Personaje</div>
+        <div id="inv-lienzo"></div>
+      </div>
+      <div id="inv-detalle"></div>
+    </div>
     <div id="inv-hint" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-      <span>Click = equipar / usar · Click en equipo = quitar · <b>K</b> guardar · <b>I</b> cerrar</span>
+      <span>Click = ver el objeto · Click en equipo = quitar · <b>K</b> guardar · <b>I</b> cerrar</span>
       <button id="wipe-save">🗑️ Borrar partida</button>
     </div>
   </div>
@@ -689,10 +726,48 @@ function statLine(it){
   return parts.join(' · ');
 }
 function slotName(s){ return s==='weapon'?'Arma':s==='armor'?'Armadura':'Accesorio'; }
+/** Objeto abierto en la ficha de la derecha. */
+let itemElegido = null;
+
+/* ============================================================
+   VISTA DEL PERSONAJE EN EL INVENTARIO
+
+   Un renderer chico aparte, con su propia escena y su propio héroe. El del
+   mundo no sirve acá: está en medio de la partida, en cualquier pose, con la
+   cámara del juego encima y la mitad del cuerpo tapada por un árbol. Este
+   gira despacio y sólo se dibuja con el inventario abierto, así no le cuesta
+   un solo cuadro al juego mientras jugás.
+   ============================================================ */
+const vistaR = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+vistaR.setPixelRatio(Math.min(devicePixelRatio, 2));
+vistaR.setSize(150, 196);
+document.getElementById('inv-lienzo').appendChild(vistaR.domElement);
+
+const vistaEscena = new THREE.Scene();
+vistaEscena.add(new THREE.AmbientLight(0xffffff, 1.15));
+const vistaLuz = new THREE.DirectionalLight(0xffffff, 1.1);
+vistaLuz.position.set(3, 7, 5); vistaEscena.add(vistaLuz);
+
+const vistaHeroe = buildHero();
+vistaEscena.add(vistaHeroe);
+// Pose de catálogo: los brazos rectos al costado se ven a maniquí.
+vistaHeroe.userData.armL.rotation.x = -0.09;
+vistaHeroe.userData.armR.rotation.x = -0.09;
+vistaHeroe.userData.codoL.rotation.x = -0.26;
+vistaHeroe.userData.codoR.rotation.x = -0.32;
+
+const vistaCam = new THREE.PerspectiveCamera(30, 150/196, 0.1, 100);
+vistaCam.position.set(0, 2.6, 15); vistaCam.lookAt(0, 2.3, 0);
+
+function dibujarVistaPersonaje(dt){
+  vistaHeroe.rotation.y += dt*0.6;
+  vistaR.render(vistaEscena, vistaCam);
+}
+
 function renderInventory(){
   const panel = document.getElementById('inventory');
   panel.style.display = inventoryOpen ? 'block' : 'none';
-  if(!inventoryOpen) return;
+  if(!inventoryOpen){ itemElegido = null; return; }
   document.getElementById('inv-gold').textContent = player.gold;
   document.getElementById('inv-stats').innerHTML =
     `⚔️ ATK ${player.atk}&nbsp;&nbsp; 🛡️ DEF ${player.def}&nbsp;&nbsp; ❤️ HP ${player.hpMax}&nbsp;&nbsp; 🔷 MP ${player.mpMax}`;
@@ -707,15 +782,71 @@ function renderInventory(){
   }
   const grid = document.getElementById('inv-grid'); grid.innerHTML='';
   if(inventory.length===0) grid.innerHTML='<div class="empty-msg">La mochila está vacía. ¡Derrotá enemigos para conseguir botín!</div>';
+  // Si el objeto que estaba abierto ya no está (se usó, se vendió, se equipó),
+  // la ficha tiene que soltarlo o queda mostrando algo que no existe.
+  if(itemElegido && !inventory.includes(itemElegido)) itemElegido = null;
   for(const it of inventory){
     const cell = document.createElement('div'); cell.className='item';
+    if(it===itemElegido) cell.classList.add('sel');
     cell.style.borderColor = it.rarity ? it.rarity.color : '#888';
     const qty = it.qty>1 ? `<span class="qty">x${it.qty}</span>` : '';
     cell.innerHTML = `<div class="ic">${it.icon}</div>${qty}`;
-    cell.title = it.name + (it.type!=='potion' ? ' — '+statLine(it) : '');
-    cell.onclick = ()=>{ if(it.type==='potion') usePotion(it); else equipItem(it); };
+    cell.title = it.name;
+    // Un click elige y muestra la ficha; equipar o tomar es el botón.
+    // Antes un click equipaba de una: no había forma de mirar un objeto sin
+    // ponértelo, ni de comparar contra lo que ya tenías puesto.
+    cell.onclick = ()=>{ itemElegido = it; renderInventory(); };
     grid.appendChild(cell);
   }
+  renderDetalle();
+}
+
+/** Comparación contra lo que ya está puesto en esa ranura: +3 / -2 al costado. */
+function comparar(it){
+  if(it.type==='potion' || !it.slot) return {};
+  const act = equipment[it.slot]; if(!act || act===it) return {};
+  const d = {};
+  for(const k of ['atk','def','hpMax','mpMax']) d[k] = it.stats[k] - act.stats[k];
+  return d;
+}
+
+function renderDetalle(){
+  const box = document.getElementById('inv-detalle');
+  const it = itemElegido;
+  if(!it){
+    box.innerHTML = '<div class="vacio">Elegí un objeto de la mochila para ver qué hace y cuánto vale.</div>';
+    return;
+  }
+  const color = it.rarity ? it.rarity.color : '#fff';
+  const dif = comparar(it);
+  const linea = (etq, val, delta) => {
+    if(!val) return '';
+    const cmp = delta ? ` <span class="cmp">(${delta>0?'+':''}${delta})</span>` : '';
+    return `<div>${etq} <b>+${val}</b>${cmp}</div>`;
+  };
+
+  let cuerpo;
+  if(it.type==='potion'){
+    cuerpo = `<div>${it.heal.hp ? 'Restaura <b>'+it.heal.hp+'</b> de vida' : 'Restaura <b>'+it.heal.mp+'</b> de maná'}</div>`;
+  } else {
+    cuerpo = linea('⚔️ Ataque', it.stats.atk, dif.atk)
+           + linea('🛡️ Defensa', it.stats.def, dif.def)
+           + linea('❤️ Vida', it.stats.hpMax, dif.hpMax)
+           + linea('🔷 Maná', it.stats.mpMax, dif.mpMax);
+  }
+
+  box.innerHTML =
+    `<div class="cab"><div class="ic">${it.icon}</div>
+       <div><div class="nm" style="color:${color}">${it.name}</div>
+       <div class="rz" style="color:${color}">${it.rarity ? it.rarity.name : ''}${it.lv?' · Nv. '+it.lv:''}</div></div>
+     </div>
+     <div class="stats">${cuerpo}</div>
+     <div class="venta">🪙 Valor de venta: ${itemValue(it)} oro</div>`;
+
+  const btn = document.createElement('button');
+  btn.textContent = it.type==='potion' ? 'Usar' : 'Equipar';
+  btn.onclick = ()=>{ if(it.type==='potion') usePotion(it); else equipItem(it); };
+  box.appendChild(btn);
 }
 
 // ============================================================
@@ -1790,6 +1921,7 @@ function animate(){
   const dt = Math.min(0.05, clock.getDelta());
   try { update(dt); } catch(err){ console.error('update error:', err); }  // un bug no congela el juego
   renderer.render(scene, camera);
+  if(inventoryOpen) dibujarVistaPersonaje(dt);
 }
 
 addEventListener('resize', ()=>{
