@@ -1176,6 +1176,28 @@ const SKILLS = {
 function meleeAttack(){
   if(player.attackT>0) return;
   player.attackT = 0.35;
+
+  /*
+    El golpe apunta a donde estás mirando, no a donde te dejó caminando.
+
+    El daño se reparte en un arco frontal medido contra `hero.rotation.y`, y
+    esa rotación sólo cambia mientras te movés. Parado, girar la cámara no
+    giraba al personaje: apuntabas a un bicho, clickeabas, y el golpe salía
+    para el lado contrario. Con la mira en el centro eso es directamente
+    incomprensible, porque todo indica que estás apuntando.
+
+    Así que el ataque planta al personaje hacia el enemigo fijado, o hacia
+    donde mira la cámara si no hay ninguno. El giro es inmediato y no
+    suavizado, porque el arco se resuelve en este mismo cuadro.
+  */
+  if(target && target.alive){
+    const aObjetivo = target.mesh.position.clone().sub(hero.position);
+    player.faceYaw = Math.atan2(aObjetivo.x, aObjetivo.z);
+  } else {
+    player.faceYaw = yaw;                        // yaw de la órbita = hacia donde mira la cámara
+  }
+  hero.rotation.y = player.faceYaw;
+
   // hit enemies in a frontal arc
   const fwd = new THREE.Vector3(Math.sin(hero.rotation.y),0,Math.cos(hero.rotation.y));
   let hitAny=false;
