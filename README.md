@@ -8,11 +8,15 @@ Un action RPG 3D que corre entero en el navegador, en un solo archivo HTML y sin
 
 ## Qué hay adentro
 
-- **Cinco zonas** con terreno, clima y fauna propios: Pradera de Sakura, Bosque Susurrante, Desierto Ardiente, Picos Helados y Abismo Demoníaco.
+- **Cinco zonas** de dificultad creciente, cada una con su terreno, su paleta y su enemigo: Pradera de Sakura (Nv. 1-5), Bosque Susurrante (6-12), Desierto Ardiente (13-20), Picos Helados (21-30) y Abismo Demoníaco (31-45).
 - **Combate y progresión**: niveles, experiencia, estadísticas, tres habilidades con cooldown y jefes por zona.
 - **Loot con rarezas** —de Común a ÚNICO— con objetos irrepetibles que sólo sueltan ciertos jefes.
 - **Inventario, equipamiento y tienda**: cada pieza equipada recalcula las estadísticas del personaje.
 - El personaje está **construido con geometría primitiva y animado a mano**, sin modelos externos ni librería de animación.
+
+## Estado
+
+Es un sandbox de combate y progresión, no un juego terminado: se explora, se pelea, se sube de nivel y se equipa, pero no hay historia que seguir. Falta lo que le daría rumbo — NPCs con misiones, una mazmorra y un árbol de talentos o clases.
 
 ## Cómo está hecho
 
