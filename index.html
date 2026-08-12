@@ -1065,7 +1065,10 @@ renderer.domElement.addEventListener('mousedown', e=>{
 });
 addEventListener('mouseup', ()=> dragging=false);
 addEventListener('mousemove', e=>{
-  if(dragging){ yaw += e.movementX*0.004; pitch = THREE.MathUtils.clamp(pitch + e.movementY*0.004, 0.05, 1.2); }
+  // El yaw RESTA: la cámara mira hacia (sin yaw, 0, cos yaw), o sea hacia +X,
+  // y +X cae a la izquierda de la pantalla. Sumando, arrastrar el mouse a la
+  // derecha giraba la vista a la izquierda.
+  if(dragging){ yaw -= e.movementX*0.004; pitch = THREE.MathUtils.clamp(pitch + e.movementY*0.004, 0.05, 1.2); }
 });
 addEventListener('wheel', e=>{ camDist = THREE.MathUtils.clamp(camDist + e.deltaY*0.02, 8, 30); });
 addEventListener('contextmenu', e=> e.preventDefault());
