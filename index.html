@@ -740,7 +740,7 @@ function applyEquipmentVisual(hero){
     borde.rotation.x = Math.PI/2; sg.add(borde);
     sg.position.set(-0.42, -0.45, -0.55);   // delante del antebrazo izquierdo
     u.codoL.add(sg);
-    u.userData.escudo = sg;
+    u.escudo = sg;
   }
 
   // ---- ACCESORIO: un amuleto colgando del pecho ----
@@ -756,7 +756,7 @@ function applyEquipmentVisual(hero){
       new THREE.MeshStandardMaterial({color:colAcc, emissive:colAcc.clone().multiplyScalar(.6), emissiveIntensity:.8}));
     joya.position.y = -0.55; ag.add(joya);
     ag.position.set(0, 2.7, 0.92); u.body.add(ag);
-    u.userData.amuleto = ag;
+    u.amuleto = ag;
   }
 
   // ---- TORSO / BOTAS: se tiñen con la rareza del equipo ----
@@ -778,17 +778,17 @@ function applyEquipmentVisual(hero){
       new THREE.MeshStandardMaterial({color:0x222233, metalness:.5}));
     visera.position.set(0,0.55,1.02); yg.add(visera);
     u.headG.add(yg);
-    u.userData.yelmo = yg;
+    u.yelmo = yg;
   }
 }
 function limpiarYelmo(u){
-  if(u.userData.yelmo){ u.userData.yelmo.parent.remove(u.userData.yelmo); u.userData.yelmo=null; }
+  if(u.yelmo){ u.yelmo.parent.remove(u.yelmo); u.yelmo=null; }
 }
 function limpiarEscudo(u){
-  if(u.userData.escudo){ u.userData.escudo.parent.remove(u.userData.escudo); u.userData.escudo=null; }
+  if(u.escudo){ u.escudo.parent.remove(u.escudo); u.escudo=null; }
 }
 function limpiarAmuleto(u){
-  if(u.userData.amuleto){ u.userData.amuleto.parent.remove(u.userData.amuleto); u.userData.amuleto=null; }
+  if(u.amuleto){ u.amuleto.parent.remove(u.amuleto); u.amuleto=null; }
 }
 function rarizarColor(hex, base, mezcla){
   const c = new THREE.Color(hex); c.lerp(new THREE.Color(base), mezcla); return c;
