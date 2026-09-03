@@ -393,23 +393,56 @@
   <p>Cargando el reino...</p>
 </div>
 
+<script>
+/*
+  Si el módulo no llega a arrancar —un import que no existe, un archivo viejo
+  servido desde la caché— el cartel de carga se quedaba girando para siempre
+  sin decir una palabra, y desde afuera parecía que el juego estaba colgado.
+  Esto lo cuenta y sugiere lo que casi siempre lo arregla: recargar salteando
+  la caché.
+*/
+(function(){
+  var motivo = null;
+  addEventListener('error', function(ev){ motivo = motivo || ev.message || String(ev.error || ''); }, true);
+  addEventListener('unhandledrejection', function(ev){ motivo = motivo || String(ev.reason || ''); });
+  setTimeout(function(){
+    if (window.__aetheriaListo) return;
+    var l = document.getElementById('loader'); if (!l) return;
+    var sp = l.querySelector('.spinner'); if (sp) sp.style.display = 'none';
+    var p = l.querySelector('p'); if (!p) return;
+    p.style.cssText = 'color:#ff9aa5;text-align:center;max-width:560px;line-height:1.7;font-size:13px';
+    p.innerHTML = '<b>No se pudo iniciar el juego.</b><br>' +
+      (motivo ? '<code style="color:#ffd166;font-size:12px">' + motivo.replace(/</g,'&lt;') + '</code><br><br>' : '') +
+      'Si venís de una versión anterior, recargá con <b>Ctrl+Shift+R</b> para saltear la caché.';
+  }, 8000);
+})();
+</script>
+
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three.module.min.js"
 } }
 </script>
 
+<!--
+  El `?v=` de los import no es decoración: sin él el navegador puede quedarse
+  con un `js/data.js` viejo en la caché mientras baja el `index.html` nuevo, y
+  entonces el módulo pide un export que la versión cacheada no tiene. El juego
+  no arranca y el cartel de carga queda girando para siempre.
+
+  Al cambiar cualquier módulo de `js/`, subir este número.
+-->
 <script type="module">
 import * as THREE from 'three';
 import {
   ZONES, SLOTS, RARITIES, UNIQUE_RARITY, ALL_RARITIES, BOSS_NAMES, ENEMY_KINDS,
   SKILL_BOOK, SKILL_IDS, RANK_MAX, skillAt, rankCost,
-} from './js/data.js';
-import * as sfx from './js/audio.js';
+} from './js/data.js?v=2';
+import * as sfx from './js/audio.js?v=2';
 import {
   xpForLevel, getItemId, setItemId, rollRarity, makeGear, makePotion,
   makeUnique, rollLoot, itemValue, sellValue, statLine, slotName,
-} from './js/items.js';
+} from './js/items.js?v=2';
 
 // ============================================================
 //  AETHERIA ONLINE — single-player anime MMO-style RPG
@@ -4103,6 +4136,7 @@ showZone(zoneAt(hero.position.x, hero.position.z));
 hero.position.y = groundHeight(hero.position.x, hero.position.z);
 setInterval(saveGame, 12000);              // autoguardado periódico
 addEventListener('beforeunload', saveGame);// guardar al cerrar/recargar
+window.__aetheriaListo = true;             // apaga el aviso de "no arrancó"
 setTimeout(()=>{ document.getElementById('loader').style.display='none'; }, 600);
 animate();
 // Gancho para la consola del navegador: permite avanzar el juego a mano

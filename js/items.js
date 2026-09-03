@@ -11,7 +11,7 @@
 //  sí. El guardado lo preserva vía getItemId()/setItemId().
 // ============================================================
 
-import { SLOTS, RARITIES, ALL_RARITIES, UNIQUE_RARITY, GEAR, UNIQUES, SLOT_NOMBRE } from './data.js';
+import { SLOTS, RARITIES, ALL_RARITIES, UNIQUE_RARITY, GEAR, UNIQUES, SLOT_NOMBRE } from './data.js?v=2';   // la versión tiene que coincidir con la del index.html
 
 export function xpForLevel(lv){ return Math.floor(80 * Math.pow(1.35, lv-1)); }
 
