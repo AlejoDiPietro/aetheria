@@ -1314,8 +1314,7 @@ function dealDamage(e, amount, isSkill=false){
   */
   const bruto = amount * (crit ? 1.8 : 1);
   const reduccion = e.def / (e.def + e.lv * 2 + 20);   // 0..1
-  let dmg = Math.max(bruto * 0.12, bruto * (1 - reduccion));
-  dmg = Math.floor(dmg);
+  let dmg = Math.max(1, Math.floor(Math.max(bruto * 0.12, bruto * (1 - reduccion))));
   e.hp -= dmg; e.hurtT = 0.2;
   drawBar(e);
   floatText(e.mesh.position.clone().add(new THREE.Vector3(0,3.6,0)), '-'+dmg, crit?'enemy crit':'enemy');
@@ -1331,7 +1330,9 @@ function dealDamage(e, amount, isSkill=false){
 }
 
 function killEnemy(e){
+  if(!e.alive) return;       // idempotente: si ya se está muriendo, no repetir
   e.alive=false;
+  e.mesh.visible = false;    // oculto de inmediato aunque scene.remove tarde
   // death poof (más grande para jefes)
   const puffs = e.isWorldBoss ? 30 : 10;
   for(let i=0;i<puffs;i++){
@@ -1344,6 +1345,8 @@ function killEnemy(e){
   scene.remove(e.mesh);
   gainXP(e.xp);
   if(target===e){ target=null; updateTargetFrame(); }
+
+  toastMsg('⚔ '+e.name+' derrotado · +'+e.xp+' XP', '#7CFC9A', 18);
 
   if(e.isWorldBoss){
     // drop ÚNICO garantizado + oro extra + botín normal
@@ -1737,7 +1740,9 @@ function update(dt){
   if(zo !== curZone){ curZone = zo; showZone(zo); }
 
   // ---- enemies AI ----
-  for(const e of enemies){ if(!e.alive) continue;
+  for(const e of enemies){
+    if(!e.alive) continue;
+    if(e.hp<=0){ killEnemy(e); continue; }   // safety-net: mata lo que se coló
     e.bob += dt*3;
     const toP = hero.position.clone().sub(e.mesh.position); toP.y=0;
     const dP = toP.length();
