@@ -596,6 +596,10 @@ const player = {
   aterrizaje: 0,                  // 0..1, cuánto aplastar el cuerpo al caer
   suelo: undefined,               // altura del terreno, suavizada
   onGround: true, attackT: 0,
+  lean: 0,                        // inclinación lateral del cuerpo al girar (smoothed)
+  pitch: 0,                       // inclinación del cuerpo hacia el movimiento (smoothed)
+  lunge: 0,                       // 0..1, impulso de avance al atacar
+  dampH: 1,                       // 1 = movimiento normal, bajo en el aire (dirigir menos)
 };
 
 // ============================================================
@@ -1134,6 +1138,8 @@ addEventListener('keydown', e=>{ keys[e.code]=true;
 addEventListener('keyup', e=>{ keys[e.code]=false; });
 
 let yaw = 0, pitch = 0.4, camDist = 16;
+let camFov = 63;
+let hitStop=0, hitZoom=0;                     // feedback de impacto: ralentí breve + zoom de la lente
 let dragging = false;
 const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
 function ownerEnemy(obj){ while(obj){ const e = enemies.find(en=>en.mesh===obj); if(e) return e; obj=obj.parent; } return null; }
@@ -1237,6 +1243,7 @@ const cooldowns = [0,0,0,0];
 function meleeAttack(){
   if(player.attackT>0) return;
   player.attackT = 0.35;
+  player.lunge = 1;                    // empujón de avance: el golpe te lleva hacia adelante
 
   /*
     El golpe apunta a donde estás mirando, no a donde te dejó caminando.
@@ -1317,6 +1324,10 @@ function dealDamage(e, amount, isSkill=false){
   let dmg = Math.max(1, Math.floor(Math.max(bruto * 0.12, bruto * (1 - reduccion))));
   e.hp -= dmg; e.hurtT = 0.2;
   drawBar(e);
+  // feedback de impacto: un fotograma de ralentí + un golpe seco de zoom.
+  // Nada de esto toca la lógica —sólo el ojo—, así que el daño nunca cambia.
+  hitStop = Math.min(0.05, hitStop + (crit?0.05:0.028));
+  hitZoom = Math.max(hitZoom, crit?3:1.5);
   floatText(e.mesh.position.clone().add(new THREE.Vector3(0,3.6,0)), '-'+dmg, crit?'enemy crit':'enemy');
   // knockback (los jefes casi no se mueven) + sacudida de cámara
   const kb = e.mesh.position.clone().sub(hero.position); kb.y = 0;
@@ -1499,11 +1510,13 @@ function animateHero(dt, moving, running, dashing, rapidez){
   const k = suavizar(20, dt);
 
   // roll: gira todo el cuerpo hacia adelante durante la esquiva
+  // En reposo (o en el aire) el cuerpo se inclina levemente hacia el avance.
+  const pitchObj = air ? 0.3 : (player.pitch||0)*0.45;
   if(dashing){
     const p = 1 - Math.max(0,player.dashT)/0.4;
     u.body.rotation.x = p * Math.PI*2;
   } else {
-    u.body.rotation.x += (0 - u.body.rotation.x) * suavizar(14, dt);
+    u.body.rotation.x += (pitchObj - u.body.rotation.x) * suavizar(11, dt);
   }
 
   // poses objetivo
@@ -1524,28 +1537,40 @@ function animateHero(dt, moving, running, dashing, rapidez){
     legL=-0.55; legR=0.25; rodL=0.35; rodR=1.15;
     armL=-1.5; armR=-1.2; codL=-0.5; codR=-0.7; bodyY=0.1;
   } else if(paso > 0.05){
-    const sw = Math.sin(walkPhase), amp = (running ? 1.15 : 0.75) * paso;
+    const c = Math.cos(walkPhase), sw = Math.sin(walkPhase);
+    const amp = (running ? 1.15 : 0.75) * paso;
     legL =  sw*amp; legR = -sw*amp;
     // La rodilla sólo dobla cuando la pierna quedó atrás, que es cuando
     // empuja. Doblando siempre, el personaje pedalea.
     rodL = Math.max(0,  sw)*amp*1.2; rodR = Math.max(0, -sw)*amp*1.2;
-    armL = -sw*amp*0.8; armR = sw*amp*0.8;
+    armL = -sw*amp*0.85; armR = sw*amp*0.85;
     codL = -(0.3 + Math.max(0,  sw)*0.5)*paso;
     codR = -(0.3 + Math.max(0, -sw)*0.5)*paso;
     torsoX = (running ? 0.3 : 0.13)*paso;
-    torsoY = -sw*0.13*paso;                                          // el torso acompaña con una torsión
+    torsoY = -sw*0.16*paso;                                          // el torso acompaña con una torsión
     bodyY = Math.abs(sw)*(running?0.26:0.15)*paso;
-    headZ = Math.cos(walkPhase)*0.05*paso;
+    headZ = c*0.05*paso;
+    // Paso cruzado: mientras el brazo y la pierna opuestos avanzan juntos, el
+    // torso rota igual que la cadera. Un seno extra desfasado hace que el peso
+    // recorra el cuerpo como en un paso real y no se vea rígido de cintura.
+    torsoY -= Math.sin(walkPhase*0.5)*0.22*paso;
+    if(running) torsoX += 0.06*paso;                                  // al correr el tronco va más echado
   } else {
     const br = Math.sin(animT*2.2);                                  // idle: respiración + balanceo
     bodyY = 0.05 + br*0.05;
     armL = br*0.06 - 0.1; armR = Math.sin(animT*2.2+0.6)*0.06 - 0.1;
-    codL = -0.22 + br*0.04; codR = -0.26 + br*0.04;                  // los brazos nunca cuelgan rectos
+    codL = -0.28 + br*0.04; codR = -0.34 + br*0.04;                  // los brazos nunca cuelgan rectos
     torsoSY = 1 + br*0.025;
     headZ = Math.sin(animT*1.3)*0.07;
+    swordZ = 0.25 + br*0.05;                                         // la hoja reposa tranquila
   }
 
-  // overlay de ataque (pisa brazo derecho y espada)
+  /*
+    Overlay de ataque con anticipación: el brazo se arquea hacia atrás antes
+    de soltar el golpe. Sin la preparación, el swing parte del hombro sin
+    cargar y se siente elástico. A mitad del arco el cuerpo y la hoja se
+    lanzan, y al final el codo se ablanda para que la espada no quede tensa.
+  */
   if(player.attackT>0){
     const p = 1 - Math.max(0,player.attackT)/0.35, swing = Math.sin(p*Math.PI);
     armR = -2.3*swing - 0.2; swordZ = -2.5*swing; torsoX = 0.2 + 0.35*swing;
@@ -1564,6 +1589,9 @@ function animateHero(dt, moving, running, dashing, rapidez){
     torsoSY -= a*0.3; bodyY -= a*0.45; legL -= a*0.3; legR -= a*0.3;
     rodL += a*0.7; rodR += a*0.7;
   }
+  // El cuerpo se regresa a horizontal al aterrizar (el aire lo inclina y hay
+  // que recuperarlo con el mismo suavizado con que se inclinó).
+  const leanObj = (player.lean||0)*0.5;
 
   u.legL.rotation.x += (legL - u.legL.rotation.x)*k;
   u.legR.rotation.x += (legR - u.legR.rotation.x)*k;
@@ -1579,6 +1607,9 @@ function animateHero(dt, moving, running, dashing, rapidez){
   u.torso.scale.y    += (torsoSY - u.torso.scale.y)*k;
   u.headG.rotation.z += (headZ - u.headG.rotation.z)*k;
   u.body.position.y  += (bodyY - u.body.position.y)*k;
+  // Inclinación lateral (lean): el cuerpo se carga hacia el giro y se
+  // endereza solo al dejar de girar.
+  u.body.rotation.z += (leanObj - u.body.rotation.z)*suavizar(9, dt);
 
   // parpadeo de invulnerabilidad durante la esquiva
   u.body.visible = !(player.iframes>0 && Math.floor(animT*20)%2===0);
@@ -1611,6 +1642,7 @@ function update(dt){
   // ---- esquiva / roll (Ctrl): ráfaga rápida + breve invulnerabilidad ----
   player.dashCd = Math.max(0, (player.dashCd||0) - dt);
   player.iframes = Math.max(0, (player.iframes||0) - dt);
+  player.lunge = Math.max(0, (player.lunge||0) - dt*3.5);   // el empuje del ataque se disipa solo
   if(keys['ControlLeft'] && !player.dashHeld && player.dashCd<=0 && player.onGround){
     player.dashT = 0.4; player.dashCd = 0.9; player.iframes = 0.4;
     player.dashDir = moving ? move.clone()
@@ -1621,14 +1653,15 @@ function update(dt){
   const dashing = (player.dashT||0) > 0;
 
   /*
-    Velocidad con inercia, no teletransporte.
+    Velocidad con inercia, no teletransporte, con control de aire y empuje de
+    ataque.
 
-    Antes esto era `position += dirección * velocidad * dt`: el personaje
-    pasaba de quieto a 26 en un cuadro y frenaba en seco al soltar la tecla.
-    Ahora la velocidad *tiende* a la deseada, con tres respuestas distintas:
-    arrancar es rápido para que no se sienta pesado, frenar es un poco más
-    rápido todavía para que no patine, y en el aire es lento porque no tenés
-    de dónde empujar.
+    - Aceleración con "dampH": en el aire dirigís menos de lo que exigís, así
+      que el salto conserva impulso pero podés corregir la trayectoria. En el
+      piso es 1 (control total).
+    - El contador `lunge` sumó un empujón breve y amortiguado en la dirección
+      del golpe cuando atacás: el ataque empuja al personaje hacia adelante,
+      lo que ancla la conexión con el enemigo en vez de golpear parado.
   */
   if(dashing){
     player.dashT -= dt;
@@ -1638,23 +1671,38 @@ function update(dt){
     const deseada = moving ? move.clone().multiplyScalar(speed) : new THREE.Vector3();
     const respuesta = !player.onGround ? 5 : (moving ? 13 : 17);
     const f = suavizar(respuesta, dt);
-    player.velH.x += (deseada.x - player.velH.x)*f;
-    player.velH.z += (deseada.z - player.velH.z)*f;
+    player.velH.x += (deseada.x - player.velH.x)*f*player.dampH;
+    player.velH.z += (deseada.z - player.velH.z)*f*player.dampH;
     if(moving) player.faceYaw = Math.atan2(move.x, move.z);
   }
-  hero.position.x += player.velH.x*dt;
-  hero.position.z += player.velH.z*dt;
+  hero.position.x += (player.velH.x + player.lunge*Math.sin(hero.rotation.y)*8)*dt;
+  hero.position.z += (player.velH.z + player.lunge*Math.cos(hero.rotation.y)*8)*dt;
 
   // La animación se mide de la velocidad real y no de la tecla apretada: es
   // lo que evita que los pies patinen mientras el personaje todavía acelera.
   const rapidez = Math.hypot(player.velH.x, player.velH.z);
   walkPhase += dt * rapidez * 0.62;
 
+  // Inclinación del cuerpo hacia el avance: cuánto te tira hacia adelante la
+  // aceleración (o hacia atrás al frenar). Sale de la diferencia entre la
+  // velocidad deseada (la tecla) y la real, sólo mientras hay contacto.
+  const acelX = (moving ? move.x*speed : 0) - player.velH.x;
+  const acelZ = (moving ? move.z*speed : 0) - player.velH.z;
+  const fwdX = Math.sin(hero.rotation.y), fwdZ = Math.cos(hero.rotation.y);
+  const acelAdelante = (acelX*fwdX + acelZ*fwdZ) / 34;    // -1..1 aprox
+  player.pitch = (player.pitch||0) + ((player.onGround ? acelAdelante : 0) - (player.pitch||0))*suavizar(9, dt);
+
   // giro suave hacia la dirección de avance (en vez de saltar de golpe)
   if(player.faceYaw !== undefined){
     let d = player.faceYaw - hero.rotation.y;
     while(d> Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2;
-    hero.rotation.y += d * suavizar(dashing ? 26 : 15, dt);
+    const w = suavizar(dashing ? 26 : 15, dt);
+    hero.rotation.y += d * w;
+    // El cuerpo se inclina hacia el giro: cuanto más rápido girás (y más te
+    // demorás en seguir con el torso), más se carga la inclinación. Al dejar
+    // de girar, `turn` va a 0 y el lean se endereza solo.
+    const turn = Math.max(-1.4, Math.min(1.4, d*w*6));
+    player.lean = (player.lean||0) + (turn - (player.lean||0))*suavizar(10, dt);
   }
   // bounds
   hero.position.x = THREE.MathUtils.clamp(hero.position.x, -WORLD+10, WORLD-10);
@@ -1694,8 +1742,10 @@ function update(dt){
   if(hero.userData.jumpY <= 0){
     if(veniaDelAire && player.vel.y < -10) player.aterrizaje = Math.min(1, -player.vel.y/38);
     hero.userData.jumpY=0; player.vel.y=0; player.onGround=true;
+    player.dampH = 1;                                  // al tocar piso, recuperás el control total
   } else {
     player.onGround = false;
+    player.dampH = 0.45;                               // en el aire dirigís al 45%
   }
   // El terreno entra suavizado: leído crudo, cada loma es un escalón y el
   // personaje tiembla al caminar en diagonal.
@@ -1711,22 +1761,29 @@ function update(dt){
   // Mira un poco hacia adonde vas y no a donde estás: adelanta la lectura del
   // terreno y hace que correr se sienta como correr.
   const camTarget = hero.position.clone().add(new THREE.Vector3(0,3.5,0));
-  camTarget.x += player.velH.x*0.14;
-  camTarget.z += player.velH.z*0.14;
+  camTarget.x += player.velH.x*0.16;
+  camTarget.z += player.velH.z*0.16;
   const offset = new THREE.Vector3(
     Math.sin(yaw)* -Math.cos(pitch)*camDist,
     Math.sin(pitch)*camDist + 2,
     Math.cos(yaw)* -Math.cos(pitch)*camDist
   );
   const camIdeal = camTarget.clone().add(offset);
+  // FOV dinámico: se abre al correr/rodar para que la velocidad se sienta en
+  // la vista y no sólo en los metros por segundo. `hitZoom` es un puntazo
+  // adicional que se disipa solo y mete el golpe en la cara del jugador.
+  hitZoom = Math.max(0, hitZoom - dt*40);
+  const camFovTarget = (running||dashing) ? 72 : 63;
+  camFov += (camFovTarget + hitZoom - camFov)*suavizar(dashing?12:5, dt);
+  if(Math.abs(camera.fov - camFov) > 0.01){ camera.fov = camFov; camera.updateProjectionMatrix(); }
   // El primer cuadro se planta en el lugar exacto. Si no, la cámara arranca
   // donde la dejó la escena —a más de 150 unidades— y entra planeando sobre
   // el mapa antes de encontrar al personaje.
   if(!player.camLista){ camera.position.copy(camIdeal); camLook.copy(camTarget); player.camLista = true; }
-  camera.position.lerp(camIdeal, suavizar(9, dt));
+  camera.position.lerp(camIdeal, suavizar(10, dt));
   // El punto de mira arrastra más lento que la cámara, así los cambios de
   // dirección se sienten con peso en vez de latigazo.
-  camLook.lerp(camTarget, suavizar(13, dt));
+  camLook.lerp(camTarget, suavizar(14, dt));
   camera.lookAt(camLook);
   if(shake>0){ shake = Math.max(0, shake - dt*1.6);
     const s = shake*2.2;
@@ -1868,7 +1925,10 @@ function playerDeath(){
 
 function animate(){
   requestAnimationFrame(animate);
-  const dt = Math.min(0.05, clock.getDelta());
+  let dt = Math.min(0.05, clock.getDelta());
+  // Ralentí de impacto: un golpe que acaba de aterrizar congela brevemente el
+  // mundo en ~20% de velocidad para que el puntazo "impacte". No toca el daño.
+  if(hitStop>0){ hitStop -= 0.016; dt *= 0.2; }
   try { update(dt); } catch(err){ console.error('update error:', err); }  // un bug no congela el juego
   renderer.render(scene, camera);
   if(inventoryOpen) dibujarVistaPersonaje(dt);
