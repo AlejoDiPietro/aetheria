@@ -207,6 +207,13 @@
     transition:opacity .3s ease-out; z-index:30;
     background:radial-gradient(circle, rgba(255,0,0,0) 45%, rgba(220,0,30,.85) 100%); }
 
+  /* Low-HP vignette: un pulso rojo en los bordes que crece cuando te quedás
+     sin vida. Da tensión sin tapar el juego. */
+  #lowhp { position:fixed; inset:0; pointer-events:none; opacity:0; z-index:28;
+    background:radial-gradient(circle, rgba(200,0,20,0) 42%, rgba(160,0,20,.55) 88%, rgba(120,0,15,.8) 100%);
+    animation: lowhpPulse 1.4s ease-in-out infinite; }
+  @keyframes lowhpPulse { 0%,100%{opacity:var(--v,0);} 50%{opacity:calc(var(--v,0) + .18);} }
+
   /* Loading */
   #loader { position: fixed; inset: 0; display: flex; align-items: center;
     justify-content: center; flex-direction: column; gap: 14px; z-index: 50;
@@ -302,6 +309,7 @@
 
 <div id="fct"></div>
 <div id="hurt-flash"></div>
+<div id="lowhp"></div>
 <div id="toast"></div>
 
 <div id="loader">
@@ -1462,6 +1470,17 @@ function dealDamage(e, amount, isSkill=false){
   hitStop = Math.min(0.05, hitStop + (crit?0.05:0.028));
   hitZoom = Math.max(hitZoom, crit?3:1.5);
   floatText(e.mesh.position.clone().add(new THREE.Vector3(0,3.6,0)), '-'+dmg, crit?'enemy crit':'enemy');
+  // chispas de impacto: salen a chorro del punto del golpe (doradas en crit).
+  emitSparks(e.mesh.position.clone().add(new THREE.Vector3(0, e.isWorldBoss?3:1.6, 0)),
+    crit ? 0xffd166 : 0xff9db0, crit ? 14 : 7, crit ? 10 : 6);
+  if(crit){
+    // anillo de golpe crítico: un borde que se expande y muere en el suelo.
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.6,1.1,28),
+      new THREE.MeshBasicMaterial({color:0xffe066, side:THREE.DoubleSide, transparent:true}));
+    ring.rotation.x=-Math.PI/2;
+    ring.position.copy(e.mesh.position).add(new THREE.Vector3(0,0.35,0));
+    ring.userData.life=0.5; scene.add(ring); levelRings.push(ring);
+  }
   // knockback (los jefes casi no se mueven) + sacudida de cámara
   const kb = e.mesh.position.clone().sub(hero.position); kb.y = 0;
   if(kb.lengthSq()>0){ kb.normalize().multiplyScalar(e.isWorldBoss?0.25 : (crit?2.0:1.2)); e.mesh.position.add(kb); }
@@ -1518,6 +1537,75 @@ function killEnemy(e){
 const particles = [];
 const dashFantasmas = [];            // estela del dash: clones fantasma que se desvanecen
 
+// ---- chispas de impacto: una ráfaga de partículas que sale a chorro del
+// punto de golpe. Se reusan en cada hit (normales) y en los crit (doradas y
+// más densas).
+function emitSparks(pos, color, count=6, power=6){
+  for(let i=0;i<count;i++){
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.12,0.3),
+      new THREE.MeshBasicMaterial({color}));
+    p.position.copy(pos);
+    p.userData.v = new THREE.Vector3((Math.random()-.5)*power*2,
+      Math.random()*power*1.6, (Math.random()-.5)*power*2);
+    p.userData.life = 0.35 + Math.random()*0.15;
+    p.userData.spin = (Math.random()-.5)*4;
+    scene.add(p); particles.push(p);
+  }
+}
+
+// ---- motas del aire: polvillo luminoso que flota y parpadea para que el
+// paisaje se sienta vivo aunque no haya pelea. Un campo limitado que sigue al
+// jugador y responde al color de la zona.
+const ambientMotes = [];
+let motesTimer = 0;
+function pillarMotes(dt){
+  const pale = new THREE.Color(curZone ? curZone.color : 0x9fc8ff)
+    .lerp(new THREE.Color(0xffffff), 0.55);
+  const cap = 40;
+  // respawn: mantener el campo alrededor del héroe y barato.
+  for(let i=ambientMotes.length-1;i>=0;i--){
+    const m = ambientMotes[i];
+    m.life -= dt;
+    m.mesh.position.addScaledVector(m.userData.v, dt);
+    const op = Math.min(0.5, m.life*1.5) * m.userData.base;
+    if(m.mesh.material.opacity !== op){ m.mesh.material.opacity = op; }
+    const c = Math.sin(m.userData.ph + m.userData.vel*6)*0.04;   // parpadeo suave
+    m.mesh.scale.setScalar(m.userData.s + c);
+    if(m.life<=0 || m.mesh.position.distanceToSquared(hero.position) > 130*130){
+      scene.remove(m.mesh); ambientMotes.splice(i,1);
+    }
+  }
+  motesTimer -= dt;
+  if(motesTimer<=0 && ambientMotes.length < cap){
+    motesTimer = 0.05;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1,6,6),
+      new THREE.MeshBasicMaterial({color:0xffffff, transparent:true}));
+    m.position.copy(hero.position)
+      .add(new THREE.Vector3((Math.random()-.5)*36, Math.random()*14, (Math.random()-.5)*36));
+    m.material.color.copy(pale); m.material.opacity = 0;
+    const vel = 0.4 + Math.random()*0.8, base = 0.25 + Math.random()*0.5;
+    m.userData.v = new THREE.Vector3((Math.random()-.5)*0.8, vel, (Math.random()-.5)*0.8);
+    m.userData.life = 3 + Math.random()*4; m.userData.s = 0.5 + Math.random()*1.2;
+    m.userData.base = base; m.userData.ph = Math.random()*Math.PI*2;
+    scene.add(m); ambientMotes.push({mesh:m, life:m.userData.life,
+      userData:m.userData, vel});
+  }
+}
+
+// ---- polvo de pisadas: una motita que se levanta con cada paso al correr,
+// para que el avance toque el piso en vez de flotar.
+let dustTimer = 0;
+function dustSteps(dt, moving, running){
+  if(!moving) return;
+  dustTimer -= dt;
+  const freq = running ? 0.11 : 0.22;
+  if(dustTimer<=0){
+    dustTimer = freq;
+    emitSparks(hero.position.clone().add(new THREE.Vector3((Math.random()-.5),0.1,(Math.random()-.5)*2)),
+      0xcdd2d6, running?2:1, 1.2);
+  }
+}
+
 function gainXP(amount){
   player.xp += amount;
   floatText(hero.position.clone().add(new THREE.Vector3(0,6,0)), '+'+amount+' XP', 'player');
@@ -1556,6 +1644,10 @@ function updateHUD(){
   document.getElementById('mp-label').textContent = Math.ceil(player.mp)+'/'+player.mpMax;
   document.getElementById('xp-label').textContent = 'XP '+Math.floor(player.xp/player.xpNext*100)+'%';
   const pg = document.getElementById('pgold'); if(pg) pg.textContent = '🪙 '+player.gold+' oro';
+  // viñeta de tensión: se enciende gradualmente por debajo del 35% de HP.
+  const lowhp = document.getElementById('lowhp');
+  if(lowhp){ const t = Math.min(0.6, (1 - player.hp/player.hpMax) * 1.4);
+    lowhp.style.setProperty('--v', (player.hp/player.hpMax < 0.35) ? t.toFixed(2) : 0); }
 }
 function floatText(world3, text, cls){
   const v = world3.clone().project(camera);
@@ -1834,6 +1926,7 @@ function update(dt){
     player.dashDir = moving ? move.clone()
       : new THREE.Vector3(Math.sin(hero.rotation.y),0,Math.cos(hero.rotation.y));
     shakeCam(0.2);
+    emitSparks(hero.position.clone().add(new THREE.Vector3(0,1.4,0)), 0x9fc8ff, 8, 5); // rafaga al arrancar
   }
   player.dashHeld = !!keys['ControlLeft'];
   const dashing = (player.dashT||0) > 0;
@@ -1958,6 +2051,10 @@ function update(dt){
   // ---- animación del héroe ----
   animateHero(dt, moving, running, dashing, rapidez);
 
+  // ---- ambiente vivo: polvillo del aire + polvo de pisadas ----
+  pillarMotes(dt);
+  dustSteps(dt, moving, running);
+
   // ---- camera follow ----
   // Mira un poco hacia adonde vas y no a donde estás: adelanta la lectura del
   // terreno y hace que correr se sienta como correr.
@@ -2028,6 +2125,7 @@ function update(dt){
             player.hp -= dmg;
             floatText(hero.position.clone().add(new THREE.Vector3(0,5,0)), '-'+dmg, 'enemy');
             hurtFlash(); shakeCam(0.3);
+            emitSparks(hero.position.clone().add(new THREE.Vector3(0,2.2,0)), 0xff5060, 10, 7);
             if(player.hp<=0) playerDeath();
             updateHUD();
           }
@@ -2061,6 +2159,7 @@ function update(dt){
   for(let i=particles.length-1;i>=0;i--){ const p=particles[i];
     p.userData.life-=dt; p.userData.v.y-=20*dt;
     p.position.addScaledVector(p.userData.v, dt);
+    if(p.userData.spin) p.rotation.z += p.userData.spin*dt;
     p.material.opacity = Math.max(0,p.userData.life);
     p.material.transparent=true;
     if(p.userData.life<=0){ scene.remove(p); particles.splice(i,1); }
