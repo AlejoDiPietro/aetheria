@@ -533,9 +533,10 @@ function buildHero(){
   sword.position.set(0, -0.63, 0.25); sword.castShadow=true;
   armR.userData.codo.add(sword);         // la espada va en la mano, o sea colgada del antebrazo
 
-  g.userData = { body, legL, legR, armL, armR, headG, torso, sword,
+  g.userData = { body, legL, legR, armL, armR, headG, torso, scarf, sword,
     rodillaL: legL.userData.rodilla, rodillaR: legR.userData.rodilla,
-    codoL: armL.userData.codo, codoR: armR.userData.codo };
+    codoL: armL.userData.codo, codoR: armR.userData.codo,
+    mats: { skin, hair, cloth, cloth2, boot } };
   return g;
 }
 // ----- Safe sanctuary (spawn + village) -----
@@ -667,18 +668,145 @@ function recomputeStats(){
   player.hp = Math.min(player.hp, player.hpMax);
   player.mp = Math.min(player.mp, player.mpMax);
 }
+
+// ============================================================
+//  EQUIPO VISIBLE EN EL PERSONAJE
+//
+//  El héroe del mundo y el de la ficha comparten buildHero(). Esta función
+//  re-viste a cualquiera de los dos según lo que tenga equipado: el arma se
+//  cambia por la hoja correspondiente, el yelmo aparece en la cabeza, y el
+//  torso/botas se tiñen con la rareza del equipo.
+// ============================================================
+function buildWeaponMesh(item){
+  const g = new THREE.Group();
+  const rar = item.rarity || { color:'#dfe9ff', mult:1 };
+  const rarColor = new THREE.Color(rar.color);
+  const col = rarColor.clone().lerp(new THREE.Color(0xffffff), 0.25);
+  // La hoja crece con el nivel del arma para que un drop mejor se sienta más
+  // grande, y su color sigue a la rareza.
+  const largo = 1.6 + item.lv*0.06;
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, largo, 0.45),
+    new THREE.MeshStandardMaterial({color:col, emissive:col.clone().multiplyScalar(0.25),
+      emissiveIntensity:.5, metalness:.7, roughness:.25}));
+  blade.position.y = largo/2; g.add(blade);
+  // El filo: una cuña fina más clara encima de la hoja da sensación de navaja.
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.05, largo*0.92, 0.46),
+    new THREE.MeshStandardMaterial({color:0xf5f9ff, metalness:.85, roughness:.15}));
+  edge.position.set(0, largo/2, 0.01); g.add(edge);
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.18,0.72),
+    new THREE.MeshStandardMaterial({color:rarColor, metalness:.8, roughness:.2}));
+  guard.position.y = 0.18; g.add(guard);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.13,0.75,8),
+    new THREE.MeshStandardMaterial({color:0x6b3b2a, roughness:.8}));
+  g.add(grip);
+  if(item.unique){
+    // los únicos llevan un brillo extra en la empuñadura
+    const gema = new THREE.Mesh(new THREE.SphereGeometry(0.16,10,10),
+      new THREE.MeshStandardMaterial({color:0xffd166, emissive:0xff8800, emissiveIntensity:1}));
+    gema.position.y = 0.42; g.add(gema);
+  }
+  g.castShadow = true;
+  return g;
+}
+
+function applyEquipmentVisual(hero){
+  const u = hero.userData;
+  const w = equipment.weapon;
+
+  // ---- ARMA: se reemplaza la hoja por la del arma equipada ----
+  if(u.sword && u.sword.parent) u.sword.parent.remove(u.sword);
+  if(w){
+    const nueva = buildWeaponMesh(w);
+    nueva.position.set(0, -0.63, 0.25);
+    u.codoR.add(nueva);
+    u.sword = nueva;
+  } else {
+    u.sword = buildWeaponMesh({ lv:1, rarity:{ color:'#dfe9ff', mult:1 } });
+    u.sword.position.set(0, -0.63, 0.25);
+    u.codoR.add(u.sword);
+  }
+
+  // ---- ESCUDO: aparece en el brazo izquierdo ----
+  limpiarEscudo(u);
+  const esc = equipment.shield;
+  if(esc){
+    const sg = new THREE.Group();
+    const colEsc = new THREE.Color(esc.rarity.color);
+    const placa = new THREE.Mesh(new THREE.CylinderGeometry(0.85,0.85,0.16,20),
+      new THREE.MeshStandardMaterial({color:colEsc, metalness:.7, roughness:.25}));
+    placa.rotation.x = Math.PI/2; sg.add(placa);
+    const borde = new THREE.Mesh(new THREE.TorusGeometry(0.85,0.1,10,24),
+      new THREE.MeshStandardMaterial({color:0xffd166, metalness:.8}));
+    borde.rotation.x = Math.PI/2; sg.add(borde);
+    sg.position.set(-0.42, -0.45, -0.55);   // delante del antebrazo izquierdo
+    u.codoL.add(sg);
+    u.userData.escudo = sg;
+  }
+
+  // ---- ACCESORIO: un amuleto colgando del pecho ----
+  limpiarAmuleto(u);
+  const acc = equipment.accessory;
+  if(acc){
+    const colAcc = new THREE.Color(acc.rarity.color);
+    const ag = new THREE.Group();
+    const cadena = new THREE.Mesh(new THREE.TorusGeometry(0.55,0.04,8,20),
+      new THREE.MeshStandardMaterial({color:0xffd166, metalness:.9, roughness:.2}));
+    ag.add(cadena);
+    const joya = new THREE.Mesh(new THREE.SphereGeometry(0.18,10,10),
+      new THREE.MeshStandardMaterial({color:colAcc, emissive:colAcc.clone().multiplyScalar(.6), emissiveIntensity:.8}));
+    joya.position.y = -0.55; ag.add(joya);
+    ag.position.set(0, 2.7, 0.92); u.body.add(ag);
+    u.userData.amuleto = ag;
+  }
+
+  // ---- TORSO / BOTAS: se tiñen con la rareza del equipo ----
+  const armadura = equipment.armor;   // el torso siga a la armadura
+  const colTorso = armadura ? new THREE.Color(armadura.rarity.color)
+      .lerp(new THREE.Color(0x4a6cff), 0.45) : new THREE.Color(0x4a6cff);
+  u.mats.cloth.color.copy(colTorso);
+  u.mats.cloth2.color.copy(armadura ? rarizarColor(armadura.rarity.color, 0xffffff, 0.35) : new THREE.Color(0xffffff));
+
+  // ---- YELMO: aparece/desaparece en la cabeza ----
+  limpiarYelmo(u);
+  const yel = equipment.helmet;
+  if(yel){
+    const yg = new THREE.Group();
+    const matY = new THREE.MeshStandardMaterial({color:new THREE.Color(yel.rarity.color), metalness:.6, roughness:.3});
+    const domo = new THREE.Mesh(new THREE.SphereGeometry(1.12,16,16,0,Math.PI*2,0,Math.PI*0.55), matY);
+    domo.position.y = 0.78; yg.add(domo);
+    const visera = new THREE.Mesh(new THREE.BoxGeometry(0.16,0.5,0.55),
+      new THREE.MeshStandardMaterial({color:0x222233, metalness:.5}));
+    visera.position.set(0,0.55,1.02); yg.add(visera);
+    u.headG.add(yg);
+    u.userData.yelmo = yg;
+  }
+}
+function limpiarYelmo(u){
+  if(u.userData.yelmo){ u.userData.yelmo.parent.remove(u.userData.yelmo); u.userData.yelmo=null; }
+}
+function limpiarEscudo(u){
+  if(u.userData.escudo){ u.userData.escudo.parent.remove(u.userData.escudo); u.userData.escudo=null; }
+}
+function limpiarAmuleto(u){
+  if(u.userData.amuleto){ u.userData.amuleto.parent.remove(u.userData.amuleto); u.userData.amuleto=null; }
+}
+function rarizarColor(hex, base, mezcla){
+  const c = new THREE.Color(hex); c.lerp(new THREE.Color(base), mezcla); return c;
+}
 function equipItem(item){
   const slot = item.slot, cur = equipment[slot];
   const idx = inventory.indexOf(item); if(idx>=0) inventory.splice(idx,1);
   equipment[slot] = item;
   if(cur) inventory.push(cur);
   recomputeStats(); updateHUD(); renderInventory(); saveGame();
+  applyEquipmentVisual(hero); if(vistaHeroe) applyEquipmentVisual(vistaHeroe);
   toastMsg('Equipado: '+item.name, item.rarity.color, 20);
 }
 function unequip(slot){
   const cur = equipment[slot]; if(!cur) return;
   equipment[slot] = null; inventory.push(cur);
   recomputeStats(); updateHUD(); renderInventory(); saveGame();
+  applyEquipmentVisual(hero); if(vistaHeroe) applyEquipmentVisual(vistaHeroe);
 }
 function usePotion(item){
   if(item.heal.hp) player.hp = Math.min(player.hpMax, player.hp + item.heal.hp);
@@ -1383,6 +1511,7 @@ function killEnemy(e){
 }
 
 const particles = [];
+const dashFantasmas = [];            // estela del dash: clones fantasma que se desvanecen
 
 function gainXP(amount){
   player.xp += amount;
@@ -1512,26 +1641,55 @@ function animateHero(dt, moving, running, dashing, rapidez){
   // roll: gira todo el cuerpo hacia adelante durante la esquiva
   // En reposo (o en el aire) el cuerpo se inclina levemente hacia el avance.
   const pitchObj = air ? 0.3 : (player.pitch||0)*0.45;
+  const dashPd = dashing ? 1 - Math.max(0,player.dashT)/0.4 : 1;  // 0..1 por la ráfaga
+  let dashAmp = 1;
   if(dashing){
-    const p = 1 - Math.max(0,player.dashT)/0.4;
-    u.body.rotation.x = p * Math.PI*2;
+    /*
+      Dash con fases, no un rolido entero: carga, lunge y recuperación.
+
+      - Carga (0..0.25): el cuerpo se agacha atrás y la espada se retrasa
+        para "cargar" el impulso. La rodilla delantera se pliega.
+      - Lunge (0.25..0.75): el tronco se tira para adelante, las piernas
+        se estiran en zancada y la espada vuelve hacia atrás como una
+        estela. Es el tramo de la ráfaga.
+      - Recuperación (0.75..1): vuelve a la vertical con suavidad y el
+        codo se relaja.
+    */
+    if(dashPd < 0.25){
+      const t = dashPd/0.25;
+      u.body.rotation.x = -(0.15 + t*0.35);                // se agacha atrás
+      dashAmp = 0.1 + t*0.2;
+    } else if(dashPd < 0.75){
+      const t = (dashPd-0.25)/0.5;
+      u.body.rotation.x = 0.5 + t*0.9;                     // se tira para adelante
+      dashAmp = 1.2;
+    } else {
+      const t = (dashPd-0.75)/0.25;
+      u.body.rotation.x = 1.4 - t*1.4;                     // vuelve a vertical
+      dashAmp = 1.2 - t;
+    }
   } else {
     u.body.rotation.x += (pitchObj - u.body.rotation.x) * suavizar(11, dt);
   }
 
   // poses objetivo
   let legL=0, legR=0, rodL=0, rodR=0, armL=0, armR=0, codL=0, codR=0,
-      swordZ=0, torsoX=0, torsoY=0, headZ=0, bodyY=0, torsoSY=1;
+      swordZ=0, swordX=0, torsoX=0, torsoY=0, headZ=0, bodyY=0, torsoSY=1;
 
-  /*
-    Cuánto del ciclo de caminata aplicar. Antes era binario —o quieto o a
-    pleno—, así que al arrancar y al frenar la animación entraba de golpe.
-    Ahora sale de la velocidad real: si el personaje está acelerando, el paso
-    crece con él y los pies dejan de patinar.
-  */
+  // Cuánto del ciclo de caminata aplicar sale de la velocidad real: si el
+  // personaje está acelerando, el paso crece con él y los pies dejan de patinar.
   const paso = Math.min(1, rapidez/14);
 
-  if(air){
+  // Dash: pose propia (zancada amplia, espada en estela) que pisa al resto.
+  if(dashing){
+    legL =  0.5*dashAmp; legR = -0.5*dashAmp;
+    rodL = 0.5*dashAmp*1.4; rodR = 0.5*dashAmp*1.4;
+    armL = 0.5*dashAmp; armR = -0.6*dashAmp;
+    codL = -0.4*dashAmp; codR = -1.6*dashAmp;              // codo recto: la espada viaja atrás
+    swordZ = 2.6*dashAmp; swordX = -0.4*dashAmp;           // hoja hacia atrás (estela)
+    torsoX = 0.1; bodyY = 0.05 + Math.abs(Math.sin(dashPd*Math.PI))*0.5*dashAmp;
+    headZ = 0; torsoSY = 0.96;
+  } else if(air){
     // En el aire la pierna de adelante se estira y la de atrás se recoge:
     // simétrico se ve como un muñeco cayendo.
     legL=-0.55; legR=0.25; rodL=0.35; rodR=1.15;
@@ -1546,6 +1704,10 @@ function animateHero(dt, moving, running, dashing, rapidez){
     armL = -sw*amp*0.85; armR = sw*amp*0.85;
     codL = -(0.3 + Math.max(0,  sw)*0.5)*paso;
     codR = -(0.3 + Math.max(0, -sw)*0.5)*paso;
+    // La espada lleva su propio balanceo de marcha, ligeramente desfasado del
+    // brazo: la hoja "cabecea" con el paso en vez de ir rígida al costado.
+    swordZ = 0.6 + sw*0.1*paso;
+    swordX = -0.4 - Math.abs(sw)*0.15*paso;
     torsoX = (running ? 0.3 : 0.13)*paso;
     torsoY = -sw*0.16*paso;                                          // el torso acompaña con una torsión
     bodyY = Math.abs(sw)*(running?0.26:0.15)*paso;
@@ -1562,20 +1724,38 @@ function animateHero(dt, moving, running, dashing, rapidez){
     codL = -0.28 + br*0.04; codR = -0.34 + br*0.04;                  // los brazos nunca cuelgan rectos
     torsoSY = 1 + br*0.025;
     headZ = Math.sin(animT*1.3)*0.07;
-    swordZ = 0.25 + br*0.05;                                         // la hoja reposa tranquila
+    // La espada descansa apoyada en el hombro, con una leve mecida para que
+    // no se vea clavada en el aire.
+    swordZ = 0.7 + br*0.06;
+    swordX = -0.5 + br*0.05;
   }
 
   /*
-    Overlay de ataque con anticipación: el brazo se arquea hacia atrás antes
-    de soltar el golpe. Sin la preparación, el swing parte del hombro sin
-    cargar y se siente elástico. A mitad del arco el cuerpo y la hoja se
-    lanzan, y al final el codo se ablanda para que la espada no quede tensa.
+    Overlay de ataque con anticipación y follow-through. La hoja primero se
+    retrae (carga) y sale del plano sagital en el arco para cortar, y después
+    se deja ir un pelo más allá del cuerpo —el "follow-through"— antes de
+    volver a la guardia. Ese exceso es lo que hace que el golpe se sienta con
+    peso en vez de un péndulo que se detiene en seco.
   */
   if(player.attackT>0){
-    const p = 1 - Math.max(0,player.attackT)/0.35, swing = Math.sin(p*Math.PI);
-    armR = -2.3*swing - 0.2; swordZ = -2.5*swing; torsoX = 0.2 + 0.35*swing;
-    codR = -0.9*(1-swing);                                           // el codo se estira al soltar el golpe
-    torsoY = -0.35*swing;                                            // y el tronco acompaña el arco
+    const p = 1 - Math.max(0,player.attackT)/0.35;
+    let swing, followUp, cargaBack;
+    if(p < 0.3){            // anticipación: carga atrás y arriba
+      const t = p/0.3;
+      swing = -0.4*t;       // el arco va negativo (hacia atrás) al cargar
+      cargaBack = t;
+    } else {                // corte + follow-through
+      const t = (p-0.3)/0.7;
+      swing = -0.4 + 1.8*Math.sin(t*Math.PI*0.62);
+      followUp = Math.sin(t*Math.PI);
+    }
+    armR = -2.3*swing - 0.2;
+    swordZ = -2.3*swing;
+    swordX = -1.1 - 1.2*(followUp||0);              // la hoja baja y corta en arco
+    codR = -0.5 - 0.5*swing;                        // el codo se estira al soltar
+    torsoX = 0.2 + 0.4*(followUp||0);               // el tronco acompaña el arco
+    torsoY = -0.25 - 0.35*(followUp||0);            // y rota sobre el eje vertical
+    if(cargaBack) torsoX = -0.2*cargaBack;          // carga: el tronco se echa atrás
   }
 
   /*
@@ -1602,6 +1782,7 @@ function animateHero(dt, moving, running, dashing, rapidez){
   u.codoL.rotation.x += (codL - u.codoL.rotation.x)*k;
   u.codoR.rotation.x += (codR - u.codoR.rotation.x)*k;
   u.sword.rotation.z += (swordZ - u.sword.rotation.z)*k;
+  u.sword.rotation.x += (swordX - u.sword.rotation.x)*k;
   u.torso.rotation.x += (torsoX - u.torso.rotation.x)*k;
   u.torso.rotation.y += (torsoY - u.torso.rotation.y)*k;
   u.torso.scale.y    += (torsoSY - u.torso.scale.y)*k;
@@ -1651,6 +1832,21 @@ function update(dt){
   }
   player.dashHeld = !!keys['ControlLeft'];
   const dashing = (player.dashT||0) > 0;
+
+  // --- estela del dash: sombras fantasma que se desvanecen ---
+  // Cada tramo del lunge deja un clon translúcido del héroe detrás, como un
+  // humo de velocidad. Se emite sólo durante la ráfaga para no gastar en
+  // reposo.
+  player.dashTrailT = Math.max(0, (player.dashTrailT||0) - dt);
+  if(dashing && player.dashTrailT<=0){
+    player.dashTrailT = 0.03;
+    const clon = hero.clone();
+    // el clon no proyecta sombra y sus materiales viven aparte (las opacidades
+    // se escriben en el fade, sin clonar a cada cuadro)
+    clon.traverse(o=>{ if(o.isMesh){ o.castShadow=false; o.receiveShadow=false; o.material=o.material.clone(); o.material.transparent=true; } });
+    dashFantasmas.push({ mesh:clon, life:0.3 });
+    scene.add(clon);
+  }
 
   /*
     Velocidad con inercia, no teletransporte, con control de aire y empuje de
@@ -1864,6 +2060,13 @@ function update(dt){
     p.material.transparent=true;
     if(p.userData.life<=0){ scene.remove(p); particles.splice(i,1); }
   }
+  // ---- dash afterimages (estela) ----
+  for(let i=dashFantasmas.length-1;i>=0;i--){ const g=dashFantasmas[i];
+    g.life -= dt;
+    const t = Math.max(0, g.life/0.3);
+    g.mesh.traverse(o=>{ if(o.isMesh) o.material.opacity = t*0.35; });
+    if(g.life<=0){ scene.remove(g.mesh); dashFantasmas.splice(i,1); }
+  }
   // ---- level rings ----
   for(let i=levelRings.length-1;i>=0;i--){ const ri=levelRings[i];
     ri.userData.life-=dt; ri.scale.setScalar(1+(1-ri.userData.life)*8);
@@ -1945,6 +2148,7 @@ document.getElementById('wipe-save').addEventListener('click', wipeSave);
 const loaded = loadGame();                 // continúa la partida si existe
 if(!loaded) recomputeStats();
 if(loaded) toastMsg('Partida cargada', '#7CFC9A', 22);
+applyEquipmentVisual(hero); if(vistaHeroe) applyEquipmentVisual(vistaHeroe);   // equipo visible desde el arranque
 updateHUD();
 showZone(zoneAt(hero.position.x, hero.position.z));
 hero.position.y = groundHeight(hero.position.x, hero.position.z);
