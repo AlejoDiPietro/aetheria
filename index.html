@@ -318,6 +318,13 @@
 
 <script type="module">
 import * as THREE from 'three';
+import {
+  ZONES, SKILLS, SLOTS, RARITIES, UNIQUE_RARITY, ALL_RARITIES, BOSS_NAMES,
+} from './js/data.js';
+import {
+  xpForLevel, getItemId, setItemId, rollRarity, makeGear, makePotion,
+  makeUnique, rollLoot, itemValue, sellValue, statLine, slotName,
+} from './js/items.js';
 
 // ============================================================
 //  AETHERIA ONLINE — single-player anime MMO-style RPG
@@ -352,14 +359,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 // ============================================================
 const WORLD = 500; // half-size
 
-// ----- Zones: low -> high level, arranged across the map -----
-const ZONES = [
-  { name:'Pradera de Sakura', sub:'Nv. 1-5',  color:0x7ec96b, x:0,    z:0,    r:120, lv:[1,5],   tint:0xff9ecb, enemy:'Slime Mochi' },
-  { name:'Bosque Susurrante', sub:'Nv. 6-12', color:0x3e8e5a, x:-220, z:-120, r:120, lv:[6,12],  tint:0x4caf50, enemy:'Kitsune Sombrío' },
-  { name:'Desierto Ardiente', sub:'Nv. 13-20',color:0xd9b06a, x:220,  z:-140, r:130, lv:[13,20], tint:0xff7b3a, enemy:'Golem de Arena' },
-  { name:'Picos Helados',     sub:'Nv. 21-30',color:0xc7e4ff, x:-200, z:200,  r:130, lv:[21,30], tint:0x7fdfff, enemy:'Yuki Oni' },
-  { name:'Abismo Demoníaco',  sub:'Nv. 31-45',color:0x6b3b8e, x:230,  z:210,  r:140, lv:[31,45], tint:0xb14dff, enemy:'Señor del Vacío' },
-];
+// Las definiciones de ZONES viven en js/data.js (importadas al inicio).
 
 function zoneAt(x, z) {
   let best = null, bestD = Infinity;
@@ -597,7 +597,6 @@ const player = {
   suelo: undefined,               // altura del terreno, suavizada
   onGround: true, attackT: 0,
 };
-function xpForLevel(lv){ return Math.floor(80 * Math.pow(1.35, lv-1)); }
 
 // ============================================================
 //  LOOT & INVENTORY
@@ -612,68 +611,13 @@ const inventory = [];                                    // objetos en la mochil
   una ranura significaba acordarse de los cinco. Ahora se agrega acá y el
   resto sale solo.
 */
-const SLOTS = ['weapon', 'helmet', 'armor', 'shield', 'accessory'];
-const SLOT_NOMBRE = { weapon:'Arma', helmet:'Yelmo', armor:'Armadura',
-                      shield:'Escudo', accessory:'Accesorio' };
 const equipment = Object.fromEntries(SLOTS.map(s=>[s, null]));
 const drops = [];                                        // botín tirado en el mundo
-let itemId = 1;
 
-const RARITIES = [
-  { key:'common',    name:'Común',      color:'#cfd8e3', mult:1.0, w:55 },
-  { key:'uncommon',  name:'Poco común', color:'#5dd35d', mult:1.4, w:25 },
-  { key:'rare',      name:'Raro',       color:'#5aa0ff', mult:1.9, w:13 },
-  { key:'epic',      name:'Épico',      color:'#c77dff', mult:2.6, w:6  },
-  { key:'legendary', name:'Legendario', color:'#ffb03a', mult:3.6, w:2  },
-];
-const UNIQUE_RARITY = { key:'unique', name:'ÚNICO', color:'#ff4d6d', mult:5.0, w:0 };  // solo de jefes
-const ALL_RARITIES = RARITIES.concat([UNIQUE_RARITY]);
-function rollRarity(boss){
-  const pool = RARITIES.map((r,i)=>({ r, w:r.w + (boss? i*5 : 0) }));
-  let tot = pool.reduce((s,p)=>s+p.w,0), x = Math.random()*tot;
-  for(const p of pool){ if((x -= p.w) <= 0) return p.r; }
-  return RARITIES[0];
-}
-const GEAR = {
-  weapon:    { icon:'🗡️', names:['Espada de Bronce','Katana','Wakizashi','Hoja Lunar','Filo Espiritual','Tachi Carmesí'], main:'atk' },
-  helmet:    { icon:'🪖', names:['Yelmo de Cuero','Casco Rúnico','Máscara de Oni','Diadema Astral','Capucha Sombría'], main:'cabeza' },
-  armor:     { icon:'🥋', names:['Kimono','Armadura Rúnica','Manto Sombrío','Coraza de Jade','Yukata Astral'], main:'def' },
-  shield:    { icon:'🛡️', names:['Escudo de Madera','Broquel Rúnico','Égida de Jade','Rodela Carmesí','Escudo Lunar'], main:'bloqueo' },
-  accessory: { icon:'📿', names:['Amuleto','Anillo Rúnico','Talismán','Colgante Espiritual','Reliquia Astral'], main:'mix' },
-};
-function makeGear(type, lv, rarity){
-  const g = GEAR[type], base = lv*1.6 + 4;
-  const stats = { atk:0, def:0, hpMax:0, mpMax:0 };
-  /*
-    Cada familia reparte distinto para que la elección tenga sentido: el yelmo
-    da poca defensa pero maná, el escudo es defensa pura y aguante. Si todas
-    dieran lo mismo, cinco ranuras serían una sola repetida cinco veces.
-  */
-  if(g.main==='atk'){ stats.atk=Math.round(base*rarity.mult); stats.def=Math.round(base*0.2*rarity.mult); }
-  else if(g.main==='def'){ stats.def=Math.round(base*0.8*rarity.mult); stats.hpMax=Math.round(base*1.6*rarity.mult); }
-  else if(g.main==='cabeza'){ stats.def=Math.round(base*0.45*rarity.mult); stats.hpMax=Math.round(base*0.7*rarity.mult); stats.mpMax=Math.round(base*0.9*rarity.mult); }
-  else if(g.main==='bloqueo'){ stats.def=Math.round(base*1.1*rarity.mult); stats.hpMax=Math.round(base*0.8*rarity.mult); }
-  else { stats.atk=Math.round(base*0.4*rarity.mult); stats.mpMax=Math.round(base*1.2*rarity.mult); stats.def=Math.round(base*0.3*rarity.mult); }
-  const nm = g.names[Math.floor(Math.random()*g.names.length)];
-  return { id:itemId++, type, slot:type, icon:g.icon, rarity, lv,
-           name:(rarity.key!=='common'? rarity.name+' ':'')+nm, stats };
-}
-function makePotion(kind, lv){
-  return kind==='hp'
-    ? { id:itemId++, type:'potion', icon:'🧪', rarity:RARITIES[0], name:'Poción de Vida', heal:{hp:60+lv*6, mp:0}, qty:1 }
-    : { id:itemId++, type:'potion', icon:'🔷', rarity:RARITIES[0], name:'Poción de Maná', heal:{hp:0, mp:40+lv*4}, qty:1 };
-}
-function rollLoot(e){
-  const items = [];
-  const gold = Math.floor((4 + e.lv*3) * (e.isBoss?10:1) * (0.7+Math.random()*0.6));
-  if(gold>0) items.push({ gold });
-  if(Math.random() < (e.isBoss?1:0.35)) items.push(makePotion(Math.random()<0.6?'hp':'mp', e.lv));
-  if(Math.random() < (e.isBoss?1:0.28)){
-    const n = e.isBoss?2:1;
-    for(let i=0;i<n;i++) items.push(makeGear(SLOTS[Math.floor(Math.random()*SLOTS.length)], e.lv, rollRarity(e.isBoss)));
-  }
-  return items;
-}
+// RARITIES, GEAR, SLOTS, SLOT_NOMBRE y los generadores de items viven en
+// js/data.js y js/items.js (importados al inicio). El id de los objetos lo
+// administra js/items.js y se guarda/restaura vía getItemId()/setItemId().
+
 function spawnDrop(item, pos){
   const color = item.gold ? '#ffd166' : item.rarity.color;
   const geo = item.gold ? new THREE.SphereGeometry(0.5,10,10) : new THREE.BoxGeometry(0.9,0.9,0.9);
@@ -740,15 +684,7 @@ function usePotion(item){
   item.qty--; if(item.qty<=0){ const i=inventory.indexOf(item); if(i>=0) inventory.splice(i,1); }
   updateHUD(); renderInventory();
 }
-function statLine(it){
-  const s = it.stats||{}, parts=[];
-  if(s.atk) parts.push('ATK +'+s.atk);
-  if(s.def) parts.push('DEF +'+s.def);
-  if(s.hpMax) parts.push('HP +'+s.hpMax);
-  if(s.mpMax) parts.push('MP +'+s.mpMax);
-  return parts.join(' · ');
-}
-function slotName(s){ return SLOT_NOMBRE[s] || s; }
+// statLine() y slotName() vienen de js/items.js (importados al inicio).
 /** Objeto abierto en la ficha de la derecha. */
 let itemElegido = null;
 
@@ -878,14 +814,7 @@ function renderDetalle(){
 let shopOpen = false, nearMerchant = false;
 const shopStock = [];
 
-function itemValue(item){
-  if(item.gold) return item.gold;
-  if(item.type==='potion') return 16 + Math.round((item.heal.hp||item.heal.mp)*0.35);
-  const s = item.stats;
-  const sum = s.atk + s.def + s.hpMax*0.4 + s.mpMax*0.5;
-  return Math.floor((6 + item.lv*3 + sum) * item.rarity.mult);
-}
-function sellValue(item){ return Math.max(1, Math.floor(itemValue(item) * 0.4)); }
+// itemValue() y sellValue() vienen de js/items.js (importados al inicio).
 
 function restockShop(){
   shopStock.length = 0;
@@ -998,7 +927,7 @@ function deserItem(o){ if(!o) return null; const it = {...o};
 }
 function saveGame(){
   const data = {
-    itemId,
+    itemId: getItemId(),
     player: { lv:player.lv, xp:player.xp, xpNext:player.xpNext, hp:player.hp, mp:player.mp,
               base:{...player.base}, gold:player.gold },
     pos: { x:hero.position.x, z:hero.position.z },
@@ -1019,7 +948,7 @@ function loadGame(){
     // Las partidas viejas no tienen yelmo ni escudo: deserItem(undefined) da
     // null y la ranura queda vacia, que es exactamente lo que corresponde.
     for(const s of SLOTS) equipment[s] = deserItem(d.equipment[s]);
-    if(d.itemId) itemId = d.itemId;
+    if(d.itemId) setItemId(d.itemId);
     recomputeStats();
     player.hp = Math.min(d.player.hp ?? player.hpMax, player.hpMax);
     player.mp = Math.min(d.player.mp ?? player.mpMax, player.mpMax);
@@ -1126,25 +1055,7 @@ enemies.forEach(drawBar);
 // ============================================================
 //  WORLD BOSSES (uno por zona, con drop único garantizado)
 // ============================================================
-const BOSS_NAMES = {
-  'Pradera de Sakura': 'Mochiko, Reina Slime',
-  'Bosque Susurrante': 'Tamamo, Zorro de Nueve Colas',
-  'Desierto Ardiente': 'Sandalor, Coloso de Arena',
-  'Picos Helados':     'Yukihime, Doncella de Hielo',
-  'Abismo Demoníaco':  'Malphas, Señor del Vacío',
-};
-const UNIQUES = {
-  'Pradera de Sakura': { type:'accessory', icon:'🌸', name:'Lágrima de Mochiko',        stats:{atk:10, def:8,  hpMax:80,  mpMax:40 } },
-  'Bosque Susurrante': { type:'weapon',    icon:'🦊', name:'Cola Espectral de Tamamo',  stats:{atk:48, def:12, hpMax:0,   mpMax:50 } },
-  'Desierto Ardiente': { type:'armor',     icon:'🗿', name:'Núcleo del Coloso',         stats:{atk:14, def:60, hpMax:240, mpMax:0  } },
-  'Picos Helados':     { type:'weapon',    icon:'❄️', name:'Lanza de Escarcha Eterna',  stats:{atk:105,def:24, hpMax:90,  mpMax:60 } },
-  'Abismo Demoníaco':  { type:'accessory', icon:'👁️', name:'Corona del Vacío',          stats:{atk:70, def:45, hpMax:340, mpMax:180} },
-};
-function makeUnique(zone){
-  const t = UNIQUES[zone.name];
-  return { id:itemId++, type:t.type, slot:t.type, icon:t.icon, rarity:UNIQUE_RARITY,
-           lv:zone.lv[1]+3, name:t.name, stats:{...t.stats}, unique:true };
-}
+// BOSS_NAMES, UNIQUES y makeUnique() viven en js/data.js y js/items.js.
 function buildBoss(zone){
   const lv = zone.lv[1] + 3;                 // un poco por encima del tope de zona
   const tint = zone.tint, baseCol = new THREE.Color(tint);
@@ -1321,11 +1232,7 @@ function updateTargetFrame(){
 //  COMBAT
 // ============================================================
 const cooldowns = [0,0,0,0];
-const SKILLS = {
-  1:{ name:'Llama Carmesí', mp:12, cd:3, mult:2.4, color:'#ff7b3a', range:14 },
-  2:{ name:'Rayo Veloz',    mp:16, cd:5, mult:3.2, color:'#ffe066', range:22 },
-  3:{ name:'Corte Estelar', mp:24, cd:8, mult:4.5, color:'#c77dff', range:16 },
-};
+// SKILLS viene de js/data.js (importado al inicio).
 
 function meleeAttack(){
   if(player.attackT>0) return;
@@ -1393,7 +1300,22 @@ function spawnBolt(from, to, colorHex){
 function dealDamage(e, amount, isSkill=false){
   if(!e.alive) return;
   const crit = Math.random()<0.18;
-  let dmg = Math.max(1, Math.floor((amount - e.def) * (crit?1.8:1)));
+  /*
+    La defensa del enemigo ya no se resta en seco del daño.
+
+    Antes era `amount - e.def`: apenas la defensa alcanzaba al ataque, cada
+    golpe caía al mínimo fijo de 1 y los enemigos de nivel medio/alto se
+    volvían prácticamente invencibles, sin importar cuánto subieras de nivel.
+
+    Ahora la defensa reduce un porcentaje del daño bruto, y el golpe nunca
+    baja de un piso proporcional al ataque. Así los enemigos resisten más en
+    zonas altas (la defensa sigue importando), pero siempre mueren y subir de
+    nivel devuelve la sensación de progreso.
+  */
+  const bruto = amount * (crit ? 1.8 : 1);
+  const reduccion = e.def / (e.def + e.lv * 2 + 20);   // 0..1
+  let dmg = Math.max(bruto * 0.12, bruto * (1 - reduccion));
+  dmg = Math.floor(dmg);
   e.hp -= dmg; e.hurtT = 0.2;
   drawBar(e);
   floatText(e.mesh.position.clone().add(new THREE.Vector3(0,3.6,0)), '-'+dmg, crit?'enemy crit':'enemy');
