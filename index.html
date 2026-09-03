@@ -705,6 +705,11 @@ function buildWeaponMesh(item){
       new THREE.MeshStandardMaterial({color:0xffd166, emissive:0xff8800, emissiveIntensity:1}));
     gema.position.y = 0.42; g.add(gema);
   }
+  // -- La empuñadura queda en el origen y la hoja apunta hacia +Z (adelante),
+  // -- en la misma dirección que mira el héroe. El modelo se construye erguido
+  // -- (+Y) y se tiende acá con un giro de -90° para que el filo salga hacia
+  // -- afuera en la mano, no hacia el pecho.
+  g.rotation.x = -Math.PI/2;
   g.castShadow = true;
   return g;
 }
@@ -1686,7 +1691,7 @@ function animateHero(dt, moving, running, dashing, rapidez){
     rodL = 0.5*dashAmp*1.4; rodR = 0.5*dashAmp*1.4;
     armL = 0.5*dashAmp; armR = -0.6*dashAmp;
     codL = -0.4*dashAmp; codR = -1.6*dashAmp;              // codo recto: la espada viaja atrás
-    swordZ = 2.6*dashAmp; swordX = -0.4*dashAmp;           // hoja hacia atrás (estela)
+    swordZ = 1.4*dashAmp; swordX = 0.2*dashAmp;            // la hoja se abre apenas a un lado (estela)
     torsoX = 0.1; bodyY = 0.05 + Math.abs(Math.sin(dashPd*Math.PI))*0.5*dashAmp;
     headZ = 0; torsoSY = 0.96;
   } else if(air){
@@ -1704,10 +1709,10 @@ function animateHero(dt, moving, running, dashing, rapidez){
     armL = -sw*amp*0.85; armR = sw*amp*0.85;
     codL = -(0.3 + Math.max(0,  sw)*0.5)*paso;
     codR = -(0.3 + Math.max(0, -sw)*0.5)*paso;
-    // La espada lleva su propio balanceo de marcha, ligeramente desfasado del
-    // brazo: la hoja "cabecea" con el paso en vez de ir rígida al costado.
-    swordZ = 0.6 + sw*0.1*paso;
-    swordX = -0.4 - Math.abs(sw)*0.15*paso;
+    // La espada va hacia adelante (sigue la marcha) con un leve vaivén, sin
+    // apuntarse hacia el pecho.
+    swordZ = 0.08 + sw*0.06*paso;
+    swordX = 0.12 - Math.abs(sw)*0.08*paso;
     torsoX = (running ? 0.3 : 0.13)*paso;
     torsoY = -sw*0.16*paso;                                          // el torso acompaña con una torsión
     bodyY = Math.abs(sw)*(running?0.26:0.15)*paso;
@@ -1724,10 +1729,10 @@ function animateHero(dt, moving, running, dashing, rapidez){
     codL = -0.28 + br*0.04; codR = -0.34 + br*0.04;                  // los brazos nunca cuelgan rectos
     torsoSY = 1 + br*0.025;
     headZ = Math.sin(animT*1.3)*0.07;
-    // La espada descansa apoyada en el hombro, con una leve mecida para que
-    // no se vea clavada en el aire.
-    swordZ = 0.7 + br*0.06;
-    swordX = -0.5 + br*0.05;
+    // En guardia: la hoja apunta hacia adelante y apenas se mece con la
+    // respiración, manteniendo el filo para afuera.
+    swordZ = 0.06 + br*0.03;
+    swordX = 0.12 + br*0.04;
   }
 
   /*
@@ -1749,13 +1754,13 @@ function animateHero(dt, moving, running, dashing, rapidez){
       swing = -0.4 + 1.8*Math.sin(t*Math.PI*0.62);
       followUp = Math.sin(t*Math.PI);
     }
-    armR = -2.3*swing - 0.2;
-    swordZ = -2.3*swing;
-    swordX = -1.1 - 1.2*(followUp||0);              // la hoja baja y corta en arco
-    codR = -0.5 - 0.5*swing;                        // el codo se estira al soltar
-    torsoX = 0.2 + 0.4*(followUp||0);               // el tronco acompaña el arco
-    torsoY = -0.25 - 0.35*(followUp||0);            // y rota sobre el eje vertical
-    if(cargaBack) torsoX = -0.2*cargaBack;          // carga: el tronco se echa atrás
+    armR = -1.6*swing - 0.2;
+    swordZ = -2.6*swing;                          // corte horizontal: la hoja (adelante) barre en arco
+    swordX = 0.15 - 0.25*(followUp||0);           // apenas levanta/descarga, sin clavarse en el piso
+    codR = -0.55 - 0.45*swing;                    // el codo se estira al soltar
+    torsoX = 0.2 + 0.4*(followUp||0);             // el tronco acompaña el arco
+    torsoY = -0.25 - 0.35*(followUp||0);          // y rota sobre el eje vertical
+    if(cargaBack) torsoX = -0.2*cargaBack;        // carga: el tronco se echa atrás
   }
 
   /*
